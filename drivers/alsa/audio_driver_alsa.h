@@ -37,10 +37,10 @@
 #include "core/os/thread.h"
 #include "servers/audio_server.h"
 
-#include <alsa/asoundlib.h>
+#include "asound-so_wrap.h"
 
 class AudioDriverALSA : public AudioDriver {
-	Thread *thread = nullptr;
+	Thread thread;
 	Mutex mutex;
 
 	snd_pcm_t *pcm_handle = nullptr;

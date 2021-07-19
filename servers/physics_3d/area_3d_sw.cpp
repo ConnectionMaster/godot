@@ -52,7 +52,7 @@ void Area3DSW::_shapes_changed() {
 	}
 }
 
-void Area3DSW::set_transform(const Transform &p_transform) {
+void Area3DSW::set_transform(const Transform3D &p_transform) {
 	if (!moved_list.in_list() && get_space()) {
 		get_space()->area_add_to_moved_list(&moved_list);
 	}
@@ -215,7 +215,9 @@ void Area3DSW::call_queries() {
 
 		for (Map<BodyKey, BodyState>::Element *E = monitored_bodies.front(); E;) {
 			if (E->get().state == 0) { // Nothing happened
-				E = E->next();
+				Map<BodyKey, BodyState>::Element *next = E->next();
+				monitored_bodies.erase(E);
+				E = next;
 				continue;
 			}
 
@@ -250,7 +252,9 @@ void Area3DSW::call_queries() {
 
 		for (Map<BodyKey, BodyState>::Element *E = monitored_areas.front(); E;) {
 			if (E->get().state == 0) { // Nothing happened
-				E = E->next();
+				Map<BodyKey, BodyState>::Element *next = E->next();
+				monitored_areas.erase(E);
+				E = next;
 				continue;
 			}
 

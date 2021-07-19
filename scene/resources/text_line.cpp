@@ -74,7 +74,7 @@ void TextLine::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_flags", "flags"), &TextLine::set_flags);
 	ClassDB::bind_method(D_METHOD("get_flags"), &TextLine::get_flags);
 
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "flags", PROPERTY_HINT_FLAGS, "Kashida justification,Word justification,Trim edge spaces after justification,Justification only after last tab"), "set_flags", "get_flags");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "flags", PROPERTY_HINT_FLAGS, "Kashida Justify,Word Justify,Trim Edge Spaces After Justify,Justify Only After Last Tab"), "set_flags", "get_flags");
 
 	ClassDB::bind_method(D_METHOD("get_objects"), &TextLine::get_objects);
 	ClassDB::bind_method(D_METHOD("get_object_rect", "key"), &TextLine::get_object_rect);
@@ -167,6 +167,7 @@ void TextLine::set_bidi_override(const Vector<Vector2i> &p_override) {
 }
 
 bool TextLine::add_string(const String &p_text, const Ref<Font> &p_fonts, int p_size, const Dictionary &p_opentype_features, const String &p_language) {
+	ERR_FAIL_COND_V(p_fonts.is_null(), false);
 	bool res = TS->shaped_text_add_string(rid, p_text, p_fonts->get_rids(), p_size, p_opentype_features, p_language);
 	spacing_top = p_fonts->get_spacing(Font::SPACING_TOP);
 	spacing_bottom = p_fonts->get_spacing(Font::SPACING_BOTTOM);

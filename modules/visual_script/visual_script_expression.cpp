@@ -63,7 +63,7 @@ bool VisualScriptExpression::_set(const StringName &p_name, const Variant &p_val
 		}
 		expression_dirty = true;
 		ports_changed_notify();
-		_change_notify();
+		notify_property_list_changed();
 		return true;
 	}
 
@@ -1054,7 +1054,7 @@ VisualScriptExpression::ENode *VisualScriptExpression::_parse_expression() {
 		}
 	}
 
-	/* Reduce the set set of expressions and place them in an operator tree, respecting precedence */
+	/* Reduce the set of expressions and place them in an operator tree, respecting precedence */
 
 	while (expression.size() > 1) {
 		int next_op = -1;
@@ -1498,7 +1498,7 @@ public:
 	}
 };
 
-VisualScriptNodeInstance *VisualScriptExpression::instance(VisualScriptInstance *p_instance) {
+VisualScriptNodeInstance *VisualScriptExpression::instantiate(VisualScriptInstance *p_instance) {
 	_compile_expression();
 	VisualScriptNodeInstanceExpression *instance = memnew(VisualScriptNodeInstanceExpression);
 	instance->instance = p_instance;
@@ -1506,13 +1506,20 @@ VisualScriptNodeInstance *VisualScriptExpression::instance(VisualScriptInstance 
 	return instance;
 }
 
+void VisualScriptExpression::reset_state() {
+	if (nodes) {
+		memdelete(nodes);
+		nodes = nullptr;
+		root = nullptr;
+	}
+
+	error_str = String();
+	error_set = false;
+	str_ofs = 0;
+	inputs.clear();
+}
+
 VisualScriptExpression::VisualScriptExpression() {
-	output_type = Variant::NIL;
-	expression_dirty = true;
-	error_set = true;
-	root = nullptr;
-	nodes = nullptr;
-	sequenced = false;
 }
 
 VisualScriptExpression::~VisualScriptExpression() {

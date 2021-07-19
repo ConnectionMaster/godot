@@ -31,10 +31,9 @@
 #ifndef GLTF_DOCUMENT_H
 #define GLTF_DOCUMENT_H
 
-#include "editor/import/resource_importer_scene.h"
-#include "editor/import/scene_importer_mesh_node_3d.h"
 #include "gltf_animation.h"
-#include "scene/2d/node_2d.h"
+
+#include "editor/import/scene_importer_mesh_node_3d.h"
 #include "scene/3d/bone_attachment_3d.h"
 #include "scene/3d/light_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
@@ -43,6 +42,8 @@
 #include "scene/animation/animation_player.h"
 #include "scene/resources/material.h"
 #include "scene/resources/texture.h"
+
+#include "modules/modules_enabled.gen.h"
 
 class GLTFState;
 class GLTFSkin;
@@ -161,8 +162,9 @@ private:
 	Error _parse_nodes(Ref<GLTFState> state);
 	String _get_type_name(const GLTFType p_component);
 	String _get_accessor_type_name(const GLTFDocument::GLTFType p_type);
-	String _sanitize_scene_name(const String &name);
 	String _gen_unique_name(Ref<GLTFState> state, const String &p_name);
+	String _sanitize_animation_name(const String &name);
+	String _gen_unique_animation_name(Ref<GLTFState> state, const String &p_name);
 	String _sanitize_bone_name(const String &name);
 	String _gen_unique_bone_name(Ref<GLTFState> state,
 			const GLTFSkeletonIndex skel_i,
@@ -203,7 +205,7 @@ private:
 	Vector<Color> _decode_accessor_as_color(Ref<GLTFState> state,
 			const GLTFAccessorIndex p_accessor,
 			const bool p_for_vertex);
-	Vector<Quat> _decode_accessor_as_quat(Ref<GLTFState> state,
+	Vector<Quaternion> _decode_accessor_as_quaternion(Ref<GLTFState> state,
 			const GLTFAccessorIndex p_accessor,
 			const bool p_for_vertex);
 	Vector<Transform2D> _decode_accessor_as_xform2d(Ref<GLTFState> state,
@@ -212,7 +214,7 @@ private:
 	Vector<Basis> _decode_accessor_as_basis(Ref<GLTFState> state,
 			const GLTFAccessorIndex p_accessor,
 			const bool p_for_vertex);
-	Vector<Transform> _decode_accessor_as_xform(Ref<GLTFState> state,
+	Vector<Transform3D> _decode_accessor_as_xform(Ref<GLTFState> state,
 			const GLTFAccessorIndex p_accessor,
 			const bool p_for_vertex);
 	Error _parse_meshes(Ref<GLTFState> state);
@@ -258,11 +260,12 @@ private:
 	Error _serialize_animations(Ref<GLTFState> state);
 	BoneAttachment3D *_generate_bone_attachment(Ref<GLTFState> state,
 			Skeleton3D *skeleton,
-			const GLTFNodeIndex node_index);
+			const GLTFNodeIndex node_index,
+			const GLTFNodeIndex bone_index);
 	EditorSceneImporterMeshNode3D *_generate_mesh_instance(Ref<GLTFState> state, Node *scene_parent, const GLTFNodeIndex node_index);
 	Camera3D *_generate_camera(Ref<GLTFState> state, Node *scene_parent,
 			const GLTFNodeIndex node_index);
-	Light3D *_generate_light(Ref<GLTFState> state, Node *scene_parent, const GLTFNodeIndex node_index);
+	Node3D *_generate_light(Ref<GLTFState> state, Node *scene_parent, const GLTFNodeIndex node_index);
 	Node3D *_generate_spatial(Ref<GLTFState> state, Node *scene_parent,
 			const GLTFNodeIndex node_index);
 	void _assign_scene_names(Ref<GLTFState> state);
@@ -270,8 +273,8 @@ private:
 	T _interpolate_track(const Vector<float> &p_times, const Vector<T> &p_values,
 			const float p_time,
 			const GLTFAnimation::Interpolation p_interp);
-	GLTFAccessorIndex _encode_accessor_as_quats(Ref<GLTFState> state,
-			const Vector<Quat> p_attribs,
+	GLTFAccessorIndex _encode_accessor_as_quaternions(Ref<GLTFState> state,
+			const Vector<Quaternion> p_attribs,
 			const bool p_for_vertex);
 	GLTFAccessorIndex _encode_accessor_as_weights(Ref<GLTFState> state,
 			const Vector<Color> p_attribs,
@@ -314,7 +317,7 @@ private:
 			const Vector<int32_t> p_attribs,
 			const bool p_for_vertex);
 	GLTFAccessorIndex _encode_accessor_as_xform(Ref<GLTFState> state,
-			const Vector<Transform> p_attribs,
+			const Vector<Transform3D> p_attribs,
 			const bool p_for_vertex);
 	Error _encode_buffer_view(Ref<GLTFState> state, const double *src,
 			const int count, const GLTFType type,
@@ -330,7 +333,7 @@ private:
 	String interpolation_to_string(const GLTFAnimation::Interpolation p_interp);
 	GLTFAnimation::Track _convert_animation_track(Ref<GLTFState> state,
 			GLTFAnimation::Track p_track,
-			Ref<Animation> p_animation, Transform p_bone_rest,
+			Ref<Animation> p_animation, Transform3D p_bone_rest,
 			int32_t p_track_i,
 			GLTFNodeIndex p_node_i);
 	Error _encode_buffer_bins(Ref<GLTFState> state, const String &p_path);
@@ -363,6 +366,7 @@ public:
 	void _generate_scene_node(Ref<GLTFState> state, Node *scene_parent,
 			Node3D *scene_root,
 			const GLTFNodeIndex node_index);
+	void _generate_skeleton_bone_node(Ref<GLTFState> state, Node *scene_parent, Node3D *scene_root, const GLTFNodeIndex node_index);
 	void _import_animation(Ref<GLTFState> state, AnimationPlayer *ap,
 			const GLTFAnimationIndex index, const int bake_fps);
 	GLTFMeshIndex _convert_mesh_instance(Ref<GLTFState> state,
@@ -377,7 +381,9 @@ public:
 			const GLTFNodeIndex p_gltf_current,
 			const GLTFNodeIndex p_gltf_root);
 
+#ifdef MODULE_CSG_ENABLED
 	void _convert_csg_shape_to_gltf(Node *p_current, GLTFNodeIndex p_gltf_parent, Ref<GLTFNode> gltf_node, Ref<GLTFState> state);
+#endif // MODULE_CSG_ENABLED
 
 	void _create_gltf_node(Ref<GLTFState> state,
 			Node *p_scene_parent,
@@ -395,12 +401,14 @@ public:
 	void _convert_camera_to_gltf(Camera3D *camera, Ref<GLTFState> state,
 			Node3D *spatial,
 			Ref<GLTFNode> gltf_node);
+#ifdef MODULE_GRIDMAP_ENABLED
 	void _convert_grid_map_to_gltf(
 			Node *p_scene_parent,
 			const GLTFNodeIndex &p_parent_node_index,
 			const GLTFNodeIndex &p_root_node_index,
 			Ref<GLTFNode> gltf_node, Ref<GLTFState> state,
 			Node *p_root_node);
+#endif // MODULE_GRIDMAP_ENABLED
 	void _convert_mult_mesh_instance_to_gltf(
 			Node *p_scene_parent,
 			const GLTFNodeIndex &p_parent_node_index,

@@ -33,10 +33,10 @@
 
 #include "tools/import_utils.h"
 
-#include "core/object/reference.h"
+#include "core/object/ref_counted.h"
 #include "core/string/ustring.h"
 
-struct FBXMaterial : public Reference {
+struct FBXMaterial : public RefCounted {
 	String material_name = String();
 	bool warning_non_pbr_material = false;
 	FBXDocParser::Material *material = nullptr;
@@ -217,9 +217,6 @@ struct FBXMaterial : public Reference {
 		{ "TransparencyFactor", PROPERTY_DESC_TRANSPARENT },
 		{ "Maya|opacity", PROPERTY_DESC_TRANSPARENT },
 
-		/* Metallic */
-		{ "Shininess", PROPERTY_DESC_METALLIC },
-		{ "Reflectivity", PROPERTY_DESC_METALLIC },
 		{ "Maya|metalness", PROPERTY_DESC_METALLIC },
 		{ "Maya|metallic", PROPERTY_DESC_METALLIC },
 
@@ -241,6 +238,8 @@ struct FBXMaterial : public Reference {
 		{ "Maya|emissionColor", PROPERTY_DESC_EMISSIVE_COLOR },
 
 		/* Ignore */
+		{ "Shininess", PROPERTY_DESC_IGNORE },
+		{ "Reflectivity", PROPERTY_DESC_IGNORE },
 		{ "Maya|diffuseRoughness", PROPERTY_DESC_IGNORE },
 		{ "Maya", PROPERTY_DESC_IGNORE },
 		{ "Diffuse", PROPERTY_DESC_ALBEDO_COLOR },
@@ -267,7 +266,7 @@ struct FBXMaterial : public Reference {
 
 	/* storing the texture properties like color */
 	template <class T>
-	struct TexturePropertyMapping : Reference {
+	struct TexturePropertyMapping : RefCounted {
 		StandardMaterial3D::TextureParam map_mode = StandardMaterial3D::TextureParam::TEXTURE_ALBEDO;
 		const T property = T();
 	};

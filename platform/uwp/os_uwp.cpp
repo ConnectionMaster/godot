@@ -44,8 +44,6 @@
 #include "platform/windows/windows_terminal_logger.h"
 #include "servers/audio_server.h"
 #include "servers/rendering/rendering_server_default.h"
-#include "servers/rendering/rendering_server_wrap_mt.h"
-#include "thread_uwp.h"
 
 #include <ppltasks.h>
 #include <wrl.h>
@@ -63,6 +61,8 @@ using namespace Windows::Devices::Input;
 using namespace Windows::Devices::Sensors;
 using namespace Windows::ApplicationModel::DataTransfer;
 using namespace concurrency;
+
+static const float earth_gravity = 9.80665;
 
 int OS_UWP::get_video_driver_count() const {
 	return 2;
@@ -126,11 +126,7 @@ void OS_UWP::set_keep_screen_on(bool p_enabled) {
 }
 
 void OS_UWP::initialize_core() {
-	last_button_state = 0;
-
 	//RedirectIOToConsole();
-
-	ThreadUWP::make_default();
 
 	FileAccess::make_default<FileAccessWindows>(FileAccess::ACCESS_RESOURCES);
 	FileAccess::make_default<FileAccessWindows>(FileAccess::ACCESS_USERDATA);
@@ -149,7 +145,7 @@ void OS_UWP::initialize_core() {
 	ticks_start = 0;
 	ticks_start = get_ticks_usec();
 
-	IP_Unix::make_default();
+	IPUnix::make_default();
 
 	cursor_shape = CURSOR_ARROW;
 }
@@ -376,9 +372,9 @@ void OS_UWP::ManagedType::on_accelerometer_reading_changed(Accelerometer ^ sende
 	AccelerometerReading ^ reading = args->Reading;
 
 	os->input->set_accelerometer(Vector3(
-			reading->AccelerationX,
-			reading->AccelerationY,
-			reading->AccelerationZ));
+			reading->AccelerationX * earth_gravity,
+			reading->AccelerationY * earth_gravity,
+			reading->AccelerationZ * earth_gravity));
 }
 
 void OS_UWP::ManagedType::on_magnetometer_reading_changed(Magnetometer ^ sender, MagnetometerReadingChangedEventArgs ^ args) {
@@ -402,14 +398,12 @@ void OS_UWP::ManagedType::on_gyroscope_reading_changed(Gyrometer ^ sender, Gyrom
 void OS_UWP::set_mouse_mode(MouseMode p_mode) {
 	if (p_mode == MouseMode::MOUSE_MODE_CAPTURED) {
 		CoreWindow::GetForCurrentThread()->SetPointerCapture();
-
 	} else {
 		CoreWindow::GetForCurrentThread()->ReleasePointerCapture();
 	}
 
-	if (p_mode == MouseMode::MOUSE_MODE_CAPTURED || p_mode == MouseMode::MOUSE_MODE_HIDDEN) {
+	if (p_mode == MouseMode::MOUSE_MODE_HIDDEN || p_mode == MouseMode::MOUSE_MODE_CAPTURED || p_mode == MouseMode::MOUSE_MODE_CONFINED_HIDDEN) {
 		CoreWindow::GetForCurrentThread()->PointerCursor = nullptr;
-
 	} else {
 		CoreWindow::GetForCurrentThread()->PointerCursor = ref new CoreCursor(CoreCursorType::Arrow, 0);
 	}
@@ -427,7 +421,7 @@ Point2 OS_UWP::get_mouse_position() const {
 	return Point2(old_x, old_y);
 }
 
-int OS_UWP::get_mouse_button_state() const {
+MouseButton OS_UWP::get_mouse_button_state() const {
 	return last_button_state;
 }
 
@@ -566,10 +560,10 @@ void OS_UWP::process_key_events() {
 		KeyEvent &kev = key_event_buffer[i];
 
 		Ref<InputEventKey> key_event;
-		key_event.instance();
-		key_event->set_alt(kev.alt);
-		key_event->set_shift(kev.shift);
-		key_event->set_control(kev.control);
+		key_event.instantiate();
+		key_event->set_alt_pressed(kev.alt);
+		key_event->set_shift_pressed(kev.shift);
+		key_event->set_ctrl_pressed(kev.control);
 		key_event->set_echo(kev.echo);
 		key_event->set_keycode(kev.keycode);
 		key_event->set_physical_keycode(kev.physical_keycode);

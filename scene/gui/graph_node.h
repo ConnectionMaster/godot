@@ -46,23 +46,14 @@ public:
 
 private:
 	struct Slot {
-		bool enable_left;
-		int type_left;
-		Color color_left;
-		bool enable_right;
-		int type_right;
-		Color color_right;
+		bool enable_left = false;
+		int type_left = 0;
+		Color color_left = Color(1, 1, 1, 1);
+		bool enable_right = false;
+		int type_right = 0;
+		Color color_right = Color(1, 1, 1, 1);
 		Ref<Texture2D> custom_slot_left;
 		Ref<Texture2D> custom_slot_right;
-
-		Slot() {
-			enable_left = false;
-			type_left = 0;
-			color_left = Color(1, 1, 1, 1);
-			enable_right = false;
-			type_right = 0;
-			color_right = Color(1, 1, 1, 1);
-		}
 	};
 
 	String title;
@@ -72,12 +63,12 @@ private:
 	String language;
 	TextDirection text_direction = TEXT_DIRECTION_AUTO;
 
-	bool show_close;
+	bool show_close = false;
 	Vector2 position_offset;
-	bool comment;
-	bool resizable;
+	bool comment = false;
+	bool resizable = false;
 
-	bool resizing;
+	bool resizing = false;
 	Vector2 resizing_from;
 	Vector2 resizing_from_size;
 
@@ -87,7 +78,7 @@ private:
 
 	struct ConnCache {
 		Vector2 pos;
-		int type;
+		int type = 0;
 		Color color;
 	};
 
@@ -96,16 +87,16 @@ private:
 
 	Map<int, Slot> slot_info;
 
-	bool connpos_dirty;
+	bool connpos_dirty = true;
 
 	void _connpos_update();
 	void _resort();
 	void _shape();
 
 	Vector2 drag_from;
-	bool selected;
+	bool selected = false;
 
-	Overlay overlay;
+	Overlay overlay = OVERLAY_DISABLED;
 
 protected:
 	void _gui_input(const Ref<InputEvent> &p_ev);
@@ -122,11 +113,23 @@ public:
 	void set_slot(int p_idx, bool p_enable_left, int p_type_left, const Color &p_color_left, bool p_enable_right, int p_type_right, const Color &p_color_right, const Ref<Texture2D> &p_custom_left = Ref<Texture2D>(), const Ref<Texture2D> &p_custom_right = Ref<Texture2D>());
 	void clear_slot(int p_idx);
 	void clear_all_slots();
+
 	bool is_slot_enabled_left(int p_idx) const;
+	void set_slot_enabled_left(int p_idx, bool p_enable_left);
+
+	void set_slot_type_left(int p_idx, int p_type_left);
 	int get_slot_type_left(int p_idx) const;
+
+	void set_slot_color_left(int p_idx, const Color &p_color_left);
 	Color get_slot_color_left(int p_idx) const;
+
 	bool is_slot_enabled_right(int p_idx) const;
+	void set_slot_enabled_right(int p_idx, bool p_enable_right);
+
+	void set_slot_type_right(int p_idx, int p_type_right);
 	int get_slot_type_right(int p_idx) const;
+
+	void set_slot_color_right(int p_idx, const Color &p_color_right);
 	Color get_slot_color_right(int p_idx) const;
 
 	void set_title(const String &p_title);

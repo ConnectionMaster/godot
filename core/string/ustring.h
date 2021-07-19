@@ -309,7 +309,7 @@ public:
 	String unquote() const;
 	static String num(double p_num, int p_decimals = -1);
 	static String num_scientific(double p_num);
-	static String num_real(double p_num);
+	static String num_real(double p_num, bool p_trailing = true);
 	static String num_int64(int64_t p_num, int base = 10, bool capitalize_hex = false);
 	static String num_uint64(uint64_t p_num, int base = 10, bool capitalize_hex = false);
 	static String chr(char32_t p_char);
@@ -318,8 +318,8 @@ public:
 	bool is_numeric() const;
 
 	double to_float() const;
-	int64_t hex_to_int(bool p_with_prefix = true) const;
-	int64_t bin_to_int(bool p_with_prefix = true) const;
+	int64_t hex_to_int() const;
+	int64_t bin_to_int() const;
 	int64_t to_int() const;
 
 	static int64_t to_int(const char *p_str, int p_len = -1);
@@ -366,7 +366,7 @@ public:
 	String get_extension() const;
 	String get_basename() const;
 	String plus_file(const String &p_file) const;
-	char32_t ord_at(int p_idx) const;
+	char32_t unicode_at(int p_idx) const;
 
 	void erase(int p_pos, int p_chars);
 
@@ -397,7 +397,7 @@ public:
 	_FORCE_INLINE_ bool is_empty() const { return length() == 0; }
 
 	// path functions
-	bool is_abs_path() const;
+	bool is_absolute_path() const;
 	bool is_rel_path() const;
 	bool is_resource_file() const;
 	String path_to(const String &p_path) const;
@@ -409,21 +409,23 @@ public:
 
 	String xml_escape(bool p_escape_quotes = false) const;
 	String xml_unescape() const;
-	String http_escape() const;
-	String http_unescape() const;
+	String uri_encode() const;
+	String uri_decode() const;
 	String c_escape() const;
 	String c_escape_multiline() const;
 	String c_unescape() const;
 	String json_escape() const;
 	String word_wrap(int p_chars_per_line) const;
-
-	String percent_encode() const;
-	String percent_decode() const;
+	Error parse_url(String &r_scheme, String &r_host, int &r_port, String &r_path) const;
 
 	String property_name_encode() const;
 
+	// node functions
+	static const String invalid_node_name_characters;
+	String validate_node_name() const;
+
 	bool is_valid_identifier() const;
-	bool is_valid_integer() const;
+	bool is_valid_int() const;
 	bool is_valid_float() const;
 	bool is_valid_hex_number(bool p_with_prefix) const;
 	bool is_valid_html_color() const;

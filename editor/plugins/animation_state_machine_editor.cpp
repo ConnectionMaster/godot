@@ -76,7 +76,7 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 	Ref<InputEventMouseButton> mb = p_event;
 
 	//Add new node
-	if (mb.is_valid() && mb->is_pressed() && ((tool_select->is_pressed() && mb->get_button_index() == BUTTON_RIGHT) || (tool_create->is_pressed() && mb->get_button_index() == BUTTON_LEFT))) {
+	if (mb.is_valid() && mb->is_pressed() && ((tool_select->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_RIGHT) || (tool_create->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT))) {
 		menu->clear();
 		animations_menu->clear();
 		animations_to_add.clear();
@@ -124,7 +124,7 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 	}
 
 	// select node or push a field inside
-	if (mb.is_valid() && !mb->get_shift() && mb->is_pressed() && tool_select->is_pressed() && mb->get_button_index() == BUTTON_LEFT) {
+	if (mb.is_valid() && !mb->is_shift_pressed() && mb->is_pressed() && tool_select->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
 		selected_transition_from = StringName();
 		selected_transition_to = StringName();
 		selected_node = StringName();
@@ -216,7 +216,7 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 	}
 
 	//end moving node
-	if (mb.is_valid() && dragging_selected_attempt && mb->get_button_index() == BUTTON_LEFT && !mb->is_pressed()) {
+	if (mb.is_valid() && dragging_selected_attempt && mb->get_button_index() == MOUSE_BUTTON_LEFT && !mb->is_pressed()) {
 		if (dragging_selected) {
 			Ref<AnimationNode> an = state_machine->get_node(selected_node);
 			updating = true;
@@ -237,7 +237,7 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 	}
 
 	//connect nodes
-	if (mb.is_valid() && ((tool_select->is_pressed() && mb->get_shift()) || tool_connect->is_pressed()) && mb->get_button_index() == BUTTON_LEFT && mb->is_pressed()) {
+	if (mb.is_valid() && ((tool_select->is_pressed() && mb->is_shift_pressed()) || tool_connect->is_pressed()) && mb->get_button_index() == MOUSE_BUTTON_LEFT && mb->is_pressed()) {
 		for (int i = node_rects.size() - 1; i >= 0; i--) { //inverse to draw order
 			if (node_rects[i].node.has_point(mb->get_position())) { //select node since nothing else was selected
 				connecting = true;
@@ -250,14 +250,14 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 	}
 
 	//end connecting nodes
-	if (mb.is_valid() && connecting && mb->get_button_index() == BUTTON_LEFT && !mb->is_pressed()) {
+	if (mb.is_valid() && connecting && mb->get_button_index() == MOUSE_BUTTON_LEFT && !mb->is_pressed()) {
 		if (connecting_to_node != StringName()) {
 			if (state_machine->has_transition(connecting_from, connecting_to_node)) {
 				EditorNode::get_singleton()->show_warning(TTR("Transition exists!"));
 
 			} else {
 				Ref<AnimationNodeStateMachineTransition> tr;
-				tr.instance();
+				tr.instantiate();
 				tr->set_switch_mode(AnimationNodeStateMachineTransition::SwitchMode(transition_mode->get_selected()));
 
 				updating = true;
@@ -284,7 +284,7 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 	Ref<InputEventMouseMotion> mm = p_event;
 
 	//pan window
-	if (mm.is_valid() && mm->get_button_mask() & BUTTON_MASK_MIDDLE) {
+	if (mm.is_valid() && mm->get_button_mask() & MOUSE_BUTTON_MASK_MIDDLE) {
 		h_scroll->set_value(h_scroll->get_value() - mm->get_relative().x);
 		v_scroll->set_value(v_scroll->get_value() - mm->get_relative().y);
 	}
@@ -423,7 +423,7 @@ void AnimationNodeStateMachineEditor::_add_menu_type(int p_index) {
 	} else {
 		String type = menu->get_item_metadata(p_index);
 
-		Object *obj = ClassDB::instance(type);
+		Object *obj = ClassDB::instantiate(type);
 		ERR_FAIL_COND(!obj);
 		AnimationNode *an = Object::cast_to<AnimationNode>(obj);
 		ERR_FAIL_COND(!an);
@@ -462,7 +462,7 @@ void AnimationNodeStateMachineEditor::_add_menu_type(int p_index) {
 
 void AnimationNodeStateMachineEditor::_add_animation_type(int p_index) {
 	Ref<AnimationNodeAnimation> anim;
-	anim.instance();
+	anim.instantiate();
 
 	anim->set_animation(animations_to_add[p_index]);
 
@@ -1213,7 +1213,7 @@ AnimationNodeStateMachineEditor::AnimationNodeStateMachineEditor() {
 	add_child(top_hb);
 
 	Ref<ButtonGroup> bg;
-	bg.instance();
+	bg.instantiate();
 
 	tool_select = memnew(Button);
 	tool_select->set_flat(true);
@@ -1329,7 +1329,7 @@ AnimationNodeStateMachineEditor::AnimationNodeStateMachineEditor() {
 	name_edit = memnew(LineEdit);
 	name_edit_popup->add_child(name_edit);
 	name_edit->set_anchors_and_offsets_preset(PRESET_WIDE);
-	name_edit->connect("text_entered", callable_mp(this, &AnimationNodeStateMachineEditor::_name_edited));
+	name_edit->connect("text_submitted", callable_mp(this, &AnimationNodeStateMachineEditor::_name_edited));
 	name_edit->connect("focus_exited", callable_mp(this, &AnimationNodeStateMachineEditor::_name_edited_focus_out));
 
 	open_file = memnew(EditorFileDialog);

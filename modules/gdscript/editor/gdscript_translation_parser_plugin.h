@@ -34,13 +34,12 @@
 #include "core/templates/set.h"
 #include "editor/editor_translation_parser.h"
 #include "modules/gdscript/gdscript_parser.h"
-#include "modules/regex/regex.h"
 
 class GDScriptEditorTranslationParserPlugin : public EditorTranslationParserPlugin {
 	GDCLASS(GDScriptEditorTranslationParserPlugin, EditorTranslationParserPlugin);
 
-	Vector<String> *ids;
-	Vector<Vector<String>> *ids_ctx_plural;
+	Vector<String> *ids = nullptr;
+	Vector<Vector<String>> *ids_ctx_plural = nullptr;
 
 	// List of patterns used for extracting translation strings.
 	StringName tr_func = "tr";

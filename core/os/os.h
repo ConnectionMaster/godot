@@ -40,6 +40,7 @@
 #include "core/templates/vector.h"
 
 #include <stdarg.h>
+#include <stdlib.h>
 
 class OS {
 	static OS *singleton;
@@ -53,12 +54,12 @@ class OS {
 	bool _debug_stdout = false;
 	String _local_clipboard;
 	bool _no_window = false;
-	int _exit_code = 0;
+	int _exit_code = EXIT_FAILURE; // unexpected exit is marked as failure
 	int _orientation;
 	bool _allow_hidpi = false;
 	bool _allow_layered = false;
-	bool _use_vsync;
-	bool _vsync_via_compositor;
+	bool _stdout_enabled = true;
+	bool _stderr_enabled = true;
 
 	char *last_error;
 
@@ -149,28 +150,23 @@ public:
 	bool is_layered_allowed() const { return _allow_layered; }
 	bool is_hidpi_allowed() const { return _allow_hidpi; }
 
-	virtual int get_tablet_driver_count() const { return 0; };
-	virtual String get_tablet_driver_name(int p_driver) const { return ""; };
-	virtual String get_current_tablet_driver() const { return ""; };
-	virtual void set_current_tablet_driver(const String &p_driver){};
-
 	void ensure_user_data_dir();
 
 	virtual MainLoop *get_main_loop() const = 0;
 
 	virtual void yield();
 
-	enum Weekday {
-		DAY_SUNDAY,
-		DAY_MONDAY,
-		DAY_TUESDAY,
-		DAY_WEDNESDAY,
-		DAY_THURSDAY,
-		DAY_FRIDAY,
-		DAY_SATURDAY
+	enum Weekday : uint8_t {
+		WEEKDAY_SUNDAY,
+		WEEKDAY_MONDAY,
+		WEEKDAY_TUESDAY,
+		WEEKDAY_WEDNESDAY,
+		WEEKDAY_THURSDAY,
+		WEEKDAY_FRIDAY,
+		WEEKDAY_SATURDAY,
 	};
 
-	enum Month {
+	enum Month : uint8_t {
 		/// Start at 1 to follow Windows SYSTEMTIME structure
 		/// https://msdn.microsoft.com/en-us/library/windows/desktop/ms724950(v=vs.85).aspx
 		MONTH_JANUARY = 1,
@@ -184,21 +180,21 @@ public:
 		MONTH_SEPTEMBER,
 		MONTH_OCTOBER,
 		MONTH_NOVEMBER,
-		MONTH_DECEMBER
+		MONTH_DECEMBER,
 	};
 
 	struct Date {
-		int year;
+		int64_t year;
 		Month month;
-		int day;
+		uint8_t day;
 		Weekday weekday;
 		bool dst;
 	};
 
 	struct Time {
-		int hour;
-		int min;
-		int sec;
+		uint8_t hour;
+		uint8_t minute;
+		uint8_t second;
 	};
 
 	struct TimeZoneInfo {
@@ -209,19 +205,23 @@ public:
 	virtual Date get_date(bool local = false) const = 0;
 	virtual Time get_time(bool local = false) const = 0;
 	virtual TimeZoneInfo get_time_zone_info() const = 0;
-	virtual String get_iso_date_time(bool local = false) const;
 	virtual double get_unix_time() const;
 
 	virtual void delay_usec(uint32_t p_usec) const = 0;
 	virtual void add_frame_delay(bool p_can_draw);
 
 	virtual uint64_t get_ticks_usec() const = 0;
-	uint32_t get_ticks_msec() const;
+	uint64_t get_ticks_msec() const;
 
 	virtual bool is_userfs_persistent() const { return true; }
 
 	bool is_stdout_verbose() const;
 	bool is_stdout_debug_enabled() const;
+
+	bool is_stdout_enabled() const;
+	bool is_stderr_enabled() const;
+	void set_stdout_enabled(bool p_enabled);
+	void set_stderr_enabled(bool p_enabled);
 
 	virtual void disable_crash_handler() {}
 	virtual bool is_disable_crash_handler() const { return false; }
@@ -249,6 +249,7 @@ public:
 	virtual String get_bundle_resource_dir() const;
 
 	virtual String get_user_data_dir() const;
+	virtual String get_external_data_dir() const;
 	virtual String get_resource_dir() const;
 
 	enum SystemDir {

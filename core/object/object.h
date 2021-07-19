@@ -31,12 +31,14 @@
 #ifndef OBJECT_H
 #define OBJECT_H
 
+#include "core/extension/gdnative_interface.h"
 #include "core/object/object_id.h"
 #include "core/os/rw_lock.h"
 #include "core/os/spin_lock.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/list.h"
 #include "core/templates/map.h"
+#include "core/templates/safe_refcount.h"
 #include "core/templates/set.h"
 #include "core/templates/vmap.h"
 #include "core/variant/callable_bind.h"
@@ -56,17 +58,19 @@
 
 enum PropertyHint {
 	PROPERTY_HINT_NONE, ///< no hint provided.
-	PROPERTY_HINT_RANGE, ///< hint_text = "min,max,step,slider; //slider is optional"
-	PROPERTY_HINT_EXP_RANGE, ///< hint_text = "min,max,step", exponential edit
+	PROPERTY_HINT_RANGE, ///< hint_text = "min,max[,step][,or_greater][,or_lesser][,noslider][,radians][,degrees][,exp][,suffix:<keyword>] range.
 	PROPERTY_HINT_ENUM, ///< hint_text= "val1,val2,val3,etc"
+	PROPERTY_HINT_ENUM_SUGGESTION, ///< hint_text= "val1,val2,val3,etc"
 	PROPERTY_HINT_EXP_EASING, /// exponential easing function (Math::ease) use "attenuation" hint string to revert (flip h), "full" to also include in/out. (ie: "attenuation,inout")
 	PROPERTY_HINT_LENGTH, ///< hint_text= "length" (as integer)
 	PROPERTY_HINT_KEY_ACCEL, ///< hint_text= "length" (as integer)
 	PROPERTY_HINT_FLAGS, ///< hint_text= "flag1,flag2,etc" (as bit flags)
 	PROPERTY_HINT_LAYERS_2D_RENDER,
 	PROPERTY_HINT_LAYERS_2D_PHYSICS,
+	PROPERTY_HINT_LAYERS_2D_NAVIGATION,
 	PROPERTY_HINT_LAYERS_3D_RENDER,
 	PROPERTY_HINT_LAYERS_3D_PHYSICS,
+	PROPERTY_HINT_LAYERS_3D_NAVIGATION,
 	PROPERTY_HINT_FILE, ///< a file path must be passed, hint_text (optionally) is a filter "*.png,*.wav,*.doc,"
 	PROPERTY_HINT_DIR, ///< a directory path must be passed
 	PROPERTY_HINT_GLOBAL_FILE, ///< a file path must be passed, hint_text (optionally) is a filter "*.png,*.wav,*.doc,"
@@ -98,6 +102,7 @@ enum PropertyHint {
 };
 
 enum PropertyUsageFlags {
+	PROPERTY_USAGE_NONE = 0,
 	PROPERTY_USAGE_STORAGE = 1,
 	PROPERTY_USAGE_EDITOR = 2,
 	PROPERTY_USAGE_NETWORK = 4,
@@ -125,6 +130,7 @@ enum PropertyUsageFlags {
 	PROPERTY_USAGE_KEYING_INCREMENTS = 1 << 25, // Used in inspector to increment property when keyed in animation player
 	PROPERTY_USAGE_DEFERRED_SET_RESOURCE = 1 << 26, // when loading, the resource for this property can be set at the end of loading
 	PROPERTY_USAGE_EDITOR_INSTANTIATE_OBJECT = 1 << 27, // For Object properties, instantiate them when creating in editor.
+	PROPERTY_USAGE_EDITOR_BASIC_SETTING = 1 << 28, //for project or editor settings, show when basic settings are selected
 
 	PROPERTY_USAGE_DEFAULT = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_NETWORK,
 	PROPERTY_USAGE_DEFAULT_INTL = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_NETWORK | PROPERTY_USAGE_INTERNATIONALIZED,
@@ -146,7 +152,7 @@ struct PropertyInfo {
 	String hint_string;
 	uint32_t usage = PROPERTY_USAGE_DEFAULT;
 
-	_FORCE_INLINE_ PropertyInfo added_usage(int p_fl) const {
+	_FORCE_INLINE_ PropertyInfo added_usage(uint32_t p_fl) const {
 		PropertyInfo pi = *this;
 		pi.usage |= p_fl;
 		return pi;
@@ -158,7 +164,7 @@ struct PropertyInfo {
 
 	PropertyInfo() {}
 
-	PropertyInfo(Variant::Type p_type, const String p_name, PropertyHint p_hint = PROPERTY_HINT_NONE, const String &p_hint_string = "", uint32_t p_usage = PROPERTY_USAGE_DEFAULT, const StringName &p_class_name = StringName()) :
+	PropertyInfo(const Variant::Type p_type, const String p_name, const PropertyHint p_hint = PROPERTY_HINT_NONE, const String &p_hint_string = "", const uint32_t p_usage = PROPERTY_USAGE_DEFAULT, const StringName &p_class_name = StringName()) :
 			type(p_type),
 			name(p_name),
 			hint(p_hint),
@@ -234,6 +240,44 @@ struct MethodInfo {
 ////else
 //return nullptr;
 
+// API used to extend in GDNative and other C compatible compiled languages
+class MethodBind;
+
+struct ObjectNativeExtension {
+	ObjectNativeExtension *parent = nullptr;
+	List<ObjectNativeExtension *> children;
+	StringName parent_class_name;
+	StringName class_name;
+	bool editor_class = false;
+	GDNativeExtensionClassSet set;
+	GDNativeExtensionClassGet get;
+	GDNativeExtensionClassGetPropertyList get_property_list;
+	GDNativeExtensionClassFreePropertyList free_property_list;
+	GDNativeExtensionClassNotification notification;
+	GDNativeExtensionClassToString to_string;
+	GDNativeExtensionClassReference reference;
+	GDNativeExtensionClassReference unreference;
+
+	_FORCE_INLINE_ bool is_class(const String &p_class) const {
+		const ObjectNativeExtension *e = this;
+		while (e) {
+			if (p_class == e->class_name.operator String()) {
+				return true;
+			}
+			e = e->parent;
+		}
+		return false;
+	}
+	void *class_userdata = nullptr;
+
+	GDNativeExtensionClassCreateInstance create_instance;
+	GDNativeExtensionClassFreeInstance free_instance;
+	GDNativeExtensionClassGetVirtual get_virtual;
+};
+
+#define GDVIRTUAL_CALL(m_name, ...) _gdvirtual_##m_name##_call(__VA_ARGS__)
+#define GDVIRTUAL_BIND(m_name) ClassDB::add_virtual_method(get_class_static(), _gdvirtual_##m_name##_get_method_info());
+
 /*
    the following is an incomprehensible blob of hacks and workarounds to compensate for many of the fallencies in C++. As a plus, this macro pretty much alone defines the object model.
 */
@@ -258,9 +302,15 @@ private:                                                                        
                                                                                                                                                  \
 public:                                                                                                                                          \
 	virtual String get_class() const override {                                                                                                  \
+		if (_get_extension()) {                                                                                                                  \
+			return _get_extension()->class_name.operator String();                                                                               \
+		}                                                                                                                                        \
 		return String(#m_class);                                                                                                                 \
 	}                                                                                                                                            \
 	virtual const StringName *_get_class_namev() const override {                                                                                \
+		if (_get_extension()) {                                                                                                                  \
+			return &_get_extension()->class_name;                                                                                                \
+		}                                                                                                                                        \
 		if (!_class_name) {                                                                                                                      \
 			_class_name = get_class_static();                                                                                                    \
 		}                                                                                                                                        \
@@ -293,7 +343,12 @@ public:                                                                         
 	static String inherits_static() {                                                                                                            \
 		return String(#m_inherits);                                                                                                              \
 	}                                                                                                                                            \
-	virtual bool is_class(const String &p_class) const override { return (p_class == (#m_class)) ? true : m_inherits::is_class(p_class); }       \
+	virtual bool is_class(const String &p_class) const override {                                                                                \
+		if (_get_extension() && _get_extension()->is_class(p_class)) {                                                                           \
+			return true;                                                                                                                         \
+		}                                                                                                                                        \
+		return (p_class == (#m_class)) ? true : m_inherits::is_class(p_class);                                                                   \
+	}                                                                                                                                            \
 	virtual bool is_class_ptr(void *p_ptr) const override { return (p_ptr == get_class_ptr_static()) ? true : m_inherits::is_class_ptr(p_ptr); } \
                                                                                                                                                  \
 	static void get_valid_parents_static(List<String> *p_parents) {                                                                              \
@@ -426,15 +481,14 @@ public:
 	};
 
 private:
-	enum {
-		MAX_SCRIPT_INSTANCE_BINDINGS = 8
-	};
-
 #ifdef DEBUG_ENABLED
 	friend struct _ObjectDebugLock;
 #endif
 	friend bool predelete_handler(Object *);
 	friend void postinitialize_handler(Object *);
+
+	ObjectNativeExtension *_extension = nullptr;
+	GDExtensionClassInstancePtr _extension_instance = nullptr;
 
 	struct SignalData {
 		struct Slot {
@@ -454,7 +508,6 @@ private:
 #endif
 	bool _block_signals = false;
 	int _predelete_ok = 0;
-	Set<Object *> change_receptors;
 	ObjectID _instance_id;
 	bool _predelete();
 	void _postinitialize();
@@ -484,14 +537,40 @@ private:
 
 	_FORCE_INLINE_ void _construct_object(bool p_reference);
 
-	friend class Reference;
+	friend class RefCounted;
 	bool type_is_reference = false;
-	uint32_t instance_binding_count = 0;
-	void *_script_instance_bindings[MAX_SCRIPT_INSTANCE_BINDINGS];
+
+	std::mutex _instance_binding_mutex;
+	struct InstanceBinding {
+		void *binding;
+		void *token;
+		GDNativeInstanceBindingFreeCallback free_callback = nullptr;
+		GDNativeInstanceBindingReferenceCallback reference_callback = nullptr;
+	};
+	InstanceBinding *_instance_bindings = nullptr;
+	uint32_t _instance_binding_count = 0;
 
 	Object(bool p_reference);
 
 protected:
+	_FORCE_INLINE_ bool _instance_binding_reference(bool p_reference) {
+		bool can_die = true;
+		if (_instance_bindings) {
+			_instance_binding_mutex.lock();
+			for (uint32_t i = 0; i < _instance_binding_count; i++) {
+				if (_instance_bindings[i].reference_callback) {
+					if (!_instance_bindings[i].reference_callback(_instance_bindings[i].token, _instance_bindings[i].binding, p_reference)) {
+						can_die = false;
+					}
+				}
+			}
+			_instance_binding_mutex.unlock();
+		}
+		return can_die;
+	}
+	friend class NativeExtensionMethodBind;
+	_ALWAYS_INLINE_ const ObjectNativeExtension *_get_extension() const { return _extension; }
+	_ALWAYS_INLINE_ GDExtensionClassInstancePtr _get_extension_instance() const { return _extension_instance; }
 	virtual void _initialize_classv() { initialize_class(); }
 	virtual bool _setv(const StringName &p_name, const Variant &p_property) { return false; };
 	virtual bool _getv(const StringName &p_name, Variant &r_property) const { return false; };
@@ -523,9 +602,6 @@ protected:
 	static void get_valid_parents_static(List<String> *p_parents);
 	static void _get_valid_parents_static(List<String> *p_parents);
 
-	void property_list_changed_notify();
-	virtual void _changed_callback(Object *p_changed, const char *p_prop);
-
 	//Variant _call_bind(const StringName& p_name, const Variant& p_arg1 = Variant(), const Variant& p_arg2 = Variant(), const Variant& p_arg3 = Variant(), const Variant& p_arg4 = Variant());
 	//void _call_deferred_bind(const StringName& p_name, const Variant& p_arg1 = Variant(), const Variant& p_arg2 = Variant(), const Variant& p_arg3 = Variant(), const Variant& p_arg4 = Variant());
 
@@ -555,16 +631,8 @@ public: //should be protected, but bug in clang++
 	_FORCE_INLINE_ static void register_custom_data_to_otdb() {}
 
 public:
-#ifdef TOOLS_ENABLED
-	_FORCE_INLINE_ void _change_notify(const char *p_property = "") {
-		_edited = true;
-		for (Set<Object *>::Element *E = change_receptors.front(); E; E = E->next()) {
-			((Object *)(E->get()))->_changed_callback(this, p_property);
-		}
-	}
-#else
-	_FORCE_INLINE_ void _change_notify(const char *p_what = "") {}
-#endif
+	void notify_property_list_changed();
+
 	static void *get_class_ptr_static() {
 		static int ptr;
 		return &ptr;
@@ -573,10 +641,6 @@ public:
 	bool _is_gpl_reversed() const { return false; }
 
 	_FORCE_INLINE_ ObjectID get_instance_id() const { return _instance_id; }
-
-	// this is used for editors
-	void add_change_receptor(Object *p_receptor);
-	void remove_change_receptor(Object *p_receptor);
 
 	template <class T>
 	static T *cast_to(Object *p_object) {
@@ -622,13 +686,25 @@ public:
 	static String get_parent_class_static() { return String(); }
 	static String get_category_static() { return String(); }
 
-	virtual String get_class() const { return "Object"; }
+	virtual String get_class() const {
+		if (_extension)
+			return _extension->class_name.operator String();
+		return "Object";
+	}
 	virtual String get_save_class() const { return get_class(); } //class stored when saving
 
-	virtual bool is_class(const String &p_class) const { return (p_class == "Object"); }
+	virtual bool is_class(const String &p_class) const {
+		if (_extension && _extension->is_class(p_class)) {
+			return true;
+		}
+		return (p_class == "Object");
+	}
 	virtual bool is_class_ptr(void *p_ptr) const { return get_class_ptr_static() == p_ptr; }
 
 	_FORCE_INLINE_ const StringName &get_class_name() const {
+		if (_extension) {
+			return _extension->class_name;
+		}
 		if (!_class_ptr) {
 			return *_get_class_namev();
 		} else {
@@ -728,14 +804,14 @@ public:
 
 #endif
 
-	//used by script languages to store binding data
-	void *get_script_instance_binding(int p_script_language_index);
-	bool has_script_instance_binding(int p_script_language_index);
-	void set_script_instance_binding(int p_script_language_index, void *p_data);
+	// Used by script languages to store binding data.
+	void *get_instance_binding(void *p_token, const GDNativeInstanceBindingCallbacks *p_callbacks);
+	// Used on creation by binding only.
+	void set_instance_binding(void *p_token, void *p_binding, const GDNativeInstanceBindingCallbacks *p_callbacks);
 
 	void clear_internal_resource_paths();
 
-	_ALWAYS_INLINE_ bool is_reference() const { return type_is_reference; }
+	_ALWAYS_INLINE_ bool is_ref_counted() const { return type_is_reference; }
 
 	Object();
 	virtual ~Object();
@@ -755,7 +831,7 @@ class ObjectDB {
 	struct ObjectSlot { //128 bits per slot
 		uint64_t validator : OBJECTDB_VALIDATOR_BITS;
 		uint64_t next_free : OBJECTDB_SLOT_MAX_COUNT_BITS;
-		uint64_t is_reference : 1;
+		uint64_t is_ref_counted : 1;
 		Object *object;
 	};
 

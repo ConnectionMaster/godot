@@ -40,15 +40,6 @@ VARIANT_ENUM_CAST(Line2D::LineCapMode)
 VARIANT_ENUM_CAST(Line2D::LineTextureMode)
 
 Line2D::Line2D() {
-	_joint_mode = LINE_JOINT_SHARP;
-	_begin_cap_mode = LINE_CAP_NONE;
-	_end_cap_mode = LINE_CAP_NONE;
-	_width = 10;
-	_default_color = Color(1, 1, 1);
-	_texture_mode = LINE_TEXTURE_NONE;
-	_sharp_limit = 2.f;
-	_round_precision = 8;
-	_antialiased = false;
 }
 
 #ifdef TOOLS_ENABLED
@@ -125,6 +116,7 @@ Vector<Vector2> Line2D::get_points() const {
 }
 
 void Line2D::set_point_position(int i, Vector2 p_pos) {
+	ERR_FAIL_INDEX(i, _points.size());
 	_points.set(i, p_pos);
 	update();
 }

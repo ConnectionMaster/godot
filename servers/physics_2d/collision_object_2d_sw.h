@@ -61,7 +61,7 @@ private:
 		Variant metadata;
 		bool disabled;
 		bool one_way_collision;
-		float one_way_collision_margin;
+		real_t one_way_collision_margin;
 		Shape() {
 			disabled = false;
 			one_way_collision = false;
@@ -118,10 +118,6 @@ public:
 	void set_shape_metadata(int p_index, const Variant &p_metadata);
 
 	_FORCE_INLINE_ int get_shape_count() const { return shapes.size(); }
-	_FORCE_INLINE_ bool is_shape_disabled(int p_index) const {
-		CRASH_BAD_INDEX(p_index, shapes.size());
-		return shapes[p_index].disabled;
-	}
 	_FORCE_INLINE_ Shape2DSW *get_shape(int p_index) const {
 		CRASH_BAD_INDEX(p_index, shapes.size());
 		return shapes[p_index].shape;
@@ -143,17 +139,17 @@ public:
 		return shapes[p_index].metadata;
 	}
 
-	_FORCE_INLINE_ Transform2D get_transform() const { return transform; }
-	_FORCE_INLINE_ Transform2D get_inv_transform() const { return inv_transform; }
+	_FORCE_INLINE_ const Transform2D &get_transform() const { return transform; }
+	_FORCE_INLINE_ const Transform2D &get_inv_transform() const { return inv_transform; }
 	_FORCE_INLINE_ Space2DSW *get_space() const { return space; }
 
-	void set_shape_as_disabled(int p_idx, bool p_disabled);
-	_FORCE_INLINE_ bool is_shape_set_as_disabled(int p_idx) const {
-		CRASH_BAD_INDEX(p_idx, shapes.size());
+	void set_shape_disabled(int p_idx, bool p_disabled);
+	_FORCE_INLINE_ bool is_shape_disabled(int p_idx) const {
+		ERR_FAIL_INDEX_V(p_idx, shapes.size(), false);
 		return shapes[p_idx].disabled;
 	}
 
-	_FORCE_INLINE_ void set_shape_as_one_way_collision(int p_idx, bool p_one_way_collision, float p_margin) {
+	_FORCE_INLINE_ void set_shape_as_one_way_collision(int p_idx, bool p_one_way_collision, real_t p_margin) {
 		CRASH_BAD_INDEX(p_idx, shapes.size());
 		shapes.write[p_idx].one_way_collision = p_one_way_collision;
 		shapes.write[p_idx].one_way_collision_margin = p_margin;
@@ -163,7 +159,7 @@ public:
 		return shapes[p_idx].one_way_collision;
 	}
 
-	_FORCE_INLINE_ float get_shape_one_way_collision_margin(int p_idx) const {
+	_FORCE_INLINE_ real_t get_shape_one_way_collision_margin(int p_idx) const {
 		CRASH_BAD_INDEX(p_idx, shapes.size());
 		return shapes[p_idx].one_way_collision_margin;
 	}

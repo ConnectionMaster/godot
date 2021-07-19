@@ -305,8 +305,8 @@ void WSLPeer::close(int p_code, String p_reason) {
 	_packet_buffer.resize(0);
 }
 
-IP_Address WSLPeer::get_connected_host() const {
-	ERR_FAIL_COND_V(!is_connected_to_host() || _data->tcp.is_null(), IP_Address());
+IPAddress WSLPeer::get_connected_host() const {
+	ERR_FAIL_COND_V(!is_connected_to_host() || _data->tcp.is_null(), IPAddress());
 
 	return _data->tcp->get_connected_host();
 }
@@ -329,10 +329,6 @@ void WSLPeer::invalidate() {
 }
 
 WSLPeer::WSLPeer() {
-	_data = nullptr;
-	_is_string = 0;
-	close_code = -1;
-	write_mode = WRITE_MODE_BINARY;
 }
 
 WSLPeer::~WSLPeer() {

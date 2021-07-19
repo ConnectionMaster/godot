@@ -31,19 +31,19 @@
 #ifndef GODOT_UPNP_H
 #define GODOT_UPNP_H
 
-#include "core/object/reference.h"
+#include "core/object/ref_counted.h"
 
 #include "upnp_device.h"
 
 #include <miniupnpc/miniupnpc.h>
 
-class UPNP : public Reference {
-	GDCLASS(UPNP, Reference);
+class UPNP : public RefCounted {
+	GDCLASS(UPNP, RefCounted);
 
 private:
-	String discover_multicast_if;
-	int discover_local_port;
-	bool discover_ipv6;
+	String discover_multicast_if = "";
+	int discover_local_port = 0;
+	bool discover_ipv6 = false;
 
 	Vector<Ref<UPNPDevice>> devices;
 

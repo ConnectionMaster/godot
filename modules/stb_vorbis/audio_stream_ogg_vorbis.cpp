@@ -30,7 +30,7 @@
 
 #include "audio_stream_ogg_vorbis.h"
 
-#include "core/os/file_access.h"
+#include "core/io/file_access.h"
 
 void AudioStreamPlaybackOGGVorbis::_mix_internal(AudioFrame *p_buffer, int p_frames) {
 	ERR_FAIL_COND(!active);
@@ -47,7 +47,7 @@ void AudioStreamPlaybackOGGVorbis::_mix_internal(AudioFrame *p_buffer, int p_fra
 		int mixed = stb_vorbis_get_samples_float_interleaved(ogg_stream, 2, buffer, todo * 2);
 		if (vorbis_stream->channels == 1 && mixed > 0) {
 			//mix mono to stereo
-			for (int i = start_buffer; i < mixed; i++) {
+			for (int i = start_buffer; i < start_buffer + mixed; i++) {
 				p_buffer[i].r = p_buffer[i].l;
 			}
 		}
@@ -129,7 +129,7 @@ Ref<AudioStreamPlayback> AudioStreamOGGVorbis::instance_playback() {
 			"to it. AudioStreamOGGVorbis should not be created from the "
 			"inspector or with `.new()`. Instead, load an audio file.");
 
-	ovs.instance();
+	ovs.instantiate();
 	ovs->vorbis_stream = Ref<AudioStreamOGGVorbis>(this);
 	ovs->ogg_alloc.alloc_buffer = (char *)memalloc(decode_mem_size);
 	ovs->ogg_alloc.alloc_buffer_length_in_bytes = decode_mem_size;
@@ -204,7 +204,7 @@ void AudioStreamOGGVorbis::set_data(const Vector<uint8_t> &p_data) {
 			clear_data();
 
 			data = memalloc(src_data_len);
-			copymem(data, src_datar, src_data_len);
+			memcpy(data, src_datar, src_data_len);
 			data_len = src_data_len;
 
 			break;
@@ -221,7 +221,7 @@ Vector<uint8_t> AudioStreamOGGVorbis::get_data() const {
 		vdata.resize(data_len);
 		{
 			uint8_t *w = vdata.ptrw();
-			copymem(w, data, data_len);
+			memcpy(w, data, data_len);
 		}
 	}
 
@@ -263,16 +263,7 @@ void AudioStreamOGGVorbis::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "loop_offset"), "set_loop_offset", "get_loop_offset");
 }
 
-AudioStreamOGGVorbis::AudioStreamOGGVorbis() {
-	data = nullptr;
-	data_len = 0;
-	length = 0;
-	sample_rate = 1;
-	channels = 1;
-	loop_offset = 0;
-	decode_mem_size = 0;
-	loop = false;
-}
+AudioStreamOGGVorbis::AudioStreamOGGVorbis() {}
 
 AudioStreamOGGVorbis::~AudioStreamOGGVorbis() {
 	clear_data();

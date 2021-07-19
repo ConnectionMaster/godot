@@ -115,22 +115,24 @@ void CurveEditor::on_gui_input(const Ref<InputEvent> &p_event) {
 			}
 
 			switch (mb.get_button_index()) {
-				case BUTTON_RIGHT:
+				case MOUSE_BUTTON_RIGHT:
 					_context_click_pos = mpos;
 					open_context_menu(get_global_transform().xform(mpos));
 					break;
 
-				case BUTTON_MIDDLE:
+				case MOUSE_BUTTON_MIDDLE:
 					remove_point(_hover_point);
 					break;
 
-				case BUTTON_LEFT:
+				case MOUSE_BUTTON_LEFT:
 					_dragging = true;
+					break;
+				default:
 					break;
 			}
 		}
 
-		if (!mb.is_pressed() && _dragging && mb.get_button_index() == BUTTON_LEFT) {
+		if (!mb.is_pressed() && _dragging && mb.get_button_index() == MOUSE_BUTTON_LEFT) {
 			_dragging = false;
 			if (_has_undo_data) {
 				UndoRedo &ur = *EditorNode::get_singleton()->get_undo_redo();
@@ -168,8 +170,8 @@ void CurveEditor::on_gui_input(const Ref<InputEvent> &p_event) {
 				// Snap to "round" coordinates when holding Ctrl.
 				// Be more precise when holding Shift as well.
 				float snap_threshold;
-				if (mm.get_control()) {
-					snap_threshold = mm.get_shift() ? 0.025 : 0.1;
+				if (mm.is_ctrl_pressed()) {
+					snap_threshold = mm.is_shift_pressed() ? 0.025 : 0.1;
 				} else {
 					snap_threshold = 0.0;
 				}
@@ -776,7 +778,7 @@ void EditorInspectorPluginCurve::parse_begin(Object *p_object) {
 
 CurveEditorPlugin::CurveEditorPlugin(EditorNode *p_node) {
 	Ref<EditorInspectorPluginCurve> curve_plugin;
-	curve_plugin.instance();
+	curve_plugin.instantiate();
 	EditorInspector::add_inspector_plugin(curve_plugin);
 
 	get_editor_interface()->get_resource_previewer()->add_preview_generator(memnew(CurvePreviewGenerator));
@@ -798,7 +800,7 @@ Ref<Texture2D> CurvePreviewGenerator::generate(const Ref<Resource> &p_from, cons
 	int thumbnail_size = EditorSettings::get_singleton()->get("filesystem/file_dialog/thumbnail_size");
 	thumbnail_size *= EDSCALE;
 	Ref<Image> img_ref;
-	img_ref.instance();
+	img_ref.instantiate();
 	Image &im = **img_ref;
 
 	im.create(thumbnail_size, thumbnail_size / 2, false, Image::FORMAT_RGBA8);

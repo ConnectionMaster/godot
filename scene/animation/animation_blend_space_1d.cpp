@@ -47,7 +47,7 @@ void AnimationNodeBlendSpace1D::_validate_property(PropertyInfo &property) const
 		String left = property.name.get_slicec('/', 0);
 		int idx = left.get_slicec('_', 2).to_int();
 		if (idx >= blend_points_used) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		}
 	}
 	AnimationRootNode::_validate_property(property);
@@ -311,14 +311,6 @@ AnimationNodeBlendSpace1D::AnimationNodeBlendSpace1D() {
 	for (int i = 0; i < MAX_BLEND_POINTS; i++) {
 		blend_points[i].name = itos(i);
 	}
-	blend_points_used = 0;
-	max_space = 1;
-	min_space = -1;
-
-	snap = 0.1;
-	value_label = "value";
-
-	blend_position = "blend_position";
 }
 
 AnimationNodeBlendSpace1D::~AnimationNodeBlendSpace1D() {

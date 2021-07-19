@@ -130,7 +130,7 @@ bool CreateDialog::_should_hide_type(const String &p_type) const {
 	}
 
 	if (ClassDB::class_exists(p_type)) {
-		if (!ClassDB::can_instance(p_type)) {
+		if (!ClassDB::can_instantiate(p_type)) {
 			return true; // Can't create abstract class.
 		}
 
@@ -170,6 +170,7 @@ void CreateDialog::_update_search() {
 	root->set_text(0, base_type);
 	root->set_icon(0, search_options->get_theme_icon(icon_fallback, "EditorIcons"));
 	search_options_types[base_type] = root;
+	_configure_search_option_item(root, base_type, ClassDB::class_exists(base_type));
 
 	const String search_text = search_box->get_text();
 	bool empty_search = search_text == "";
@@ -233,17 +234,20 @@ void CreateDialog::_configure_search_option_item(TreeItem *r_item, const String 
 		r_item->set_text(0, p_type);
 	}
 
-	bool can_instance = (p_cpp_type && ClassDB::can_instance(p_type)) || !p_cpp_type;
-	if (!can_instance) {
+	bool can_instantiate = (p_cpp_type && ClassDB::can_instantiate(p_type)) || !p_cpp_type;
+	if (!can_instantiate) {
 		r_item->set_custom_color(0, search_options->get_theme_color("disabled_font_color", "Editor"));
+		r_item->set_icon(0, EditorNode::get_singleton()->get_class_icon(p_type, "NodeDisabled"));
 		r_item->set_selectable(0, false);
+	} else {
+		r_item->set_icon(0, EditorNode::get_singleton()->get_class_icon(p_type, icon_fallback));
 	}
 
 	if (search_box->get_text() != "") {
 		r_item->set_collapsed(false);
 	} else {
 		// Don't collapse the root node or an abstract node on the first tree level.
-		bool should_collapse = p_type != base_type && (r_item->get_parent()->get_text(0) != base_type || can_instance);
+		bool should_collapse = p_type != base_type && (r_item->get_parent()->get_text(0) != base_type || can_instantiate);
 
 		if (should_collapse && bool(EditorSettings::get_singleton()->get("docks/scene_tree/start_create_dialog_fully_expanded"))) {
 			should_collapse = false; // Collapse all nodes anyway.
@@ -253,7 +257,6 @@ void CreateDialog::_configure_search_option_item(TreeItem *r_item, const String 
 
 	const String &description = DTR(EditorHelp::get_doc_data()->class_list[p_type].brief_description);
 	r_item->set_tooltip(0, description);
-	r_item->set_icon(0, EditorNode::get_singleton()->get_class_icon(p_type, icon_fallback));
 
 	if (!p_cpp_type && !script_type) {
 		Ref<Texture2D> icon = EditorNode::get_editor_data().get_custom_types()[custom_type_parents[p_type]][custom_type_indices[p_type]].icon;
@@ -429,7 +432,7 @@ Variant CreateDialog::instance_selected() {
 			obj = EditorNode::get_editor_data().instance_custom_type(selected->get_text(0), custom);
 		}
 	} else {
-		obj = ClassDB::instance(selected->get_text(0));
+		obj = ClassDB::instantiate(selected->get_text(0));
 	}
 
 	// Check if any Object-type property should be instantiated.
@@ -439,7 +442,7 @@ Variant CreateDialog::instance_selected() {
 	for (List<PropertyInfo>::Element *E = pinfo.front(); E; E = E->next()) {
 		PropertyInfo pi = E->get();
 		if (pi.type == Variant::OBJECT && pi.usage & PROPERTY_USAGE_EDITOR_INSTANTIATE_OBJECT) {
-			Object *prop = ClassDB::instance(pi.class_name);
+			Object *prop = ClassDB::instantiate(pi.class_name);
 			((Object *)obj)->set(pi.name, prop);
 		}
 	}
@@ -640,9 +643,9 @@ void CreateDialog::_load_favorites_and_history() {
 void CreateDialog::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_save_and_update_favorite_list"), &CreateDialog::_save_and_update_favorite_list);
 
-	ClassDB::bind_method("get_drag_data_fw", &CreateDialog::get_drag_data_fw);
-	ClassDB::bind_method("can_drop_data_fw", &CreateDialog::can_drop_data_fw);
-	ClassDB::bind_method("drop_data_fw", &CreateDialog::drop_data_fw);
+	ClassDB::bind_method("_get_drag_data_fw", &CreateDialog::get_drag_data_fw);
+	ClassDB::bind_method("_can_drop_data_fw", &CreateDialog::can_drop_data_fw);
+	ClassDB::bind_method("_drop_data_fw", &CreateDialog::drop_data_fw);
 
 	ADD_SIGNAL(MethodInfo("create"));
 	ADD_SIGNAL(MethodInfo("favorites_updated"));
@@ -705,7 +708,6 @@ CreateDialog::CreateDialog() {
 	search_hb->add_child(search_box);
 
 	favorite = memnew(Button);
-	favorite->set_flat(true);
 	favorite->set_toggle_mode(true);
 	favorite->set_tooltip(TTR("(Un)favorite selected item."));
 	favorite->connect("pressed", callable_mp(this, &CreateDialog::_favorite_toggled));

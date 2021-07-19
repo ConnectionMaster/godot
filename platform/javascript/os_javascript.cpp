@@ -31,13 +31,12 @@
 #include "os_javascript.h"
 
 #include "core/debugger/engine_debugger.h"
-#include "core/io/json.h"
 #include "drivers/unix/dir_access_unix.h"
 #include "drivers/unix/file_access_unix.h"
 #include "main/main.h"
-#include "modules/modules_enabled.gen.h"
 #include "platform/javascript/display_server_javascript.h"
 
+#include "modules/modules_enabled.gen.h"
 #ifdef MODULE_WEBSOCKET_ENABLED
 #include "modules/websocket/remote_debugger_peer_websocket.h"
 #endif
@@ -115,7 +114,7 @@ Error OS_JavaScript::create_process(const String &p_path, const List<String> &p_
 	for (const List<String>::Element *E = p_arguments.front(); E; E = E->next()) {
 		args.push_back(E->get());
 	}
-	String json_args = JSON::print(args);
+	String json_args = Variant(args).to_json_string();
 	int failed = godot_js_os_execute(json_args.utf8().get_data());
 	ERR_FAIL_COND_V_MSG(failed, ERR_UNAVAILABLE, "OS::execute() or create_process() must be implemented in JavaScript via 'engine.setOnExecute' if required.");
 	return OK;
@@ -127,6 +126,10 @@ Error OS_JavaScript::kill(const ProcessID &p_pid) {
 
 int OS_JavaScript::get_process_id() const {
 	ERR_FAIL_V_MSG(0, "OS::get_process_id() is not available on the HTML5 platform.");
+}
+
+int OS_JavaScript::get_processor_count() const {
+	return godot_js_os_hw_concurrency_get();
 }
 
 bool OS_JavaScript::_check_internal_feature_support(const String &p_feature) {

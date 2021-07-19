@@ -78,17 +78,18 @@ struct Color {
 	void operator-=(const Color &p_color);
 
 	Color operator*(const Color &p_color) const;
-	Color operator*(real_t p_rvalue) const;
+	Color operator*(float p_scalar) const;
 	void operator*=(const Color &p_color);
-	void operator*=(real_t p_rvalue);
+	void operator*=(float p_scalar);
 
 	Color operator/(const Color &p_color) const;
-	Color operator/(real_t p_rvalue) const;
+	Color operator/(float p_scalar) const;
 	void operator/=(const Color &p_color);
-	void operator/=(real_t p_rvalue);
+	void operator/=(float p_scalar);
 
 	bool is_equal_approx(const Color &p_color) const;
 
+	Color clamp(const Color &p_min = Color(0, 0, 0, 0), const Color &p_max = Color(1, 1, 1, 1)) const;
 	void invert();
 	Color inverted() const;
 
@@ -197,13 +198,13 @@ struct Color {
 
 	// For the binder.
 	_FORCE_INLINE_ void set_r8(int32_t r8) { r = (CLAMP(r8, 0, 255) / 255.0); }
-	_FORCE_INLINE_ int32_t get_r8() const { return int32_t(CLAMP(r * 255.0, 0.0, 255.0)); }
+	_FORCE_INLINE_ int32_t get_r8() const { return int32_t(CLAMP(Math::round(r * 255.0f), 0.0f, 255.0f)); }
 	_FORCE_INLINE_ void set_g8(int32_t g8) { g = (CLAMP(g8, 0, 255) / 255.0); }
-	_FORCE_INLINE_ int32_t get_g8() const { return int32_t(CLAMP(g * 255.0, 0.0, 255.0)); }
+	_FORCE_INLINE_ int32_t get_g8() const { return int32_t(CLAMP(Math::round(g * 255.0f), 0.0f, 255.0f)); }
 	_FORCE_INLINE_ void set_b8(int32_t b8) { b = (CLAMP(b8, 0, 255) / 255.0); }
-	_FORCE_INLINE_ int32_t get_b8() const { return int32_t(CLAMP(b * 255.0, 0.0, 255.0)); }
+	_FORCE_INLINE_ int32_t get_b8() const { return int32_t(CLAMP(Math::round(b * 255.0f), 0.0f, 255.0f)); }
 	_FORCE_INLINE_ void set_a8(int32_t a8) { a = (CLAMP(a8, 0, 255) / 255.0); }
-	_FORCE_INLINE_ int32_t get_a8() const { return int32_t(CLAMP(a * 255.0, 0.0, 255.0)); }
+	_FORCE_INLINE_ int32_t get_a8() const { return int32_t(CLAMP(Math::round(a * 255.0f), 0.0f, 255.0f)); }
 
 	_FORCE_INLINE_ void set_h(float p_h) { set_hsv(p_h, get_s(), get_v()); }
 	_FORCE_INLINE_ void set_s(float p_s) { set_hsv(get_h(), p_s, get_v()); }
@@ -241,6 +242,19 @@ struct Color {
 		b = p_c.b;
 		a = p_a;
 	}
+
+	Color(const String &p_code) {
+		if (html_is_valid(p_code)) {
+			*this = html(p_code);
+		} else {
+			*this = named(p_code);
+		}
+	}
+
+	Color(const String &p_code, float p_a) {
+		*this = Color(p_code);
+		a = p_a;
+	}
 };
 
 bool Color::operator<(const Color &p_color) const {
@@ -259,8 +273,8 @@ bool Color::operator<(const Color &p_color) const {
 	}
 }
 
-_FORCE_INLINE_ Color operator*(real_t p_real, const Color &p_color) {
-	return p_color * p_real;
+_FORCE_INLINE_ Color operator*(float p_scalar, const Color &p_color) {
+	return p_color * p_scalar;
 }
 
 #endif // COLOR_H

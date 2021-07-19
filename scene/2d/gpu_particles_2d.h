@@ -43,6 +43,7 @@ public:
 	enum DrawOrder {
 		DRAW_ORDER_INDEX,
 		DRAW_ORDER_LIFETIME,
+		DRAW_ORDER_REVERSE_LIFETIME,
 	};
 
 private:
@@ -68,10 +69,22 @@ private:
 
 	void _update_particle_emission_transform();
 
+	NodePath sub_emitter;
+	float collision_base_size = 1.0;
+
+	bool trail_enabled = false;
+	float trail_length = 0.3;
+	int trail_sections = 8;
+	int trail_section_subdivisions = 4;
+
+	RID mesh;
+
 protected:
 	static void _bind_methods();
 	virtual void _validate_property(PropertyInfo &property) const override;
 	void _notification(int p_what);
+
+	void _update_collision_size();
 
 public:
 	void set_emitting(bool p_emitting);
@@ -85,6 +98,11 @@ public:
 	void set_use_local_coordinates(bool p_enable);
 	void set_process_material(const Ref<Material> &p_material);
 	void set_speed_scale(float p_scale);
+	void set_collision_base_size(float p_ratio);
+	void set_trail_enabled(bool p_enabled);
+	void set_trail_length(float p_seconds);
+	void set_trail_sections(int p_sections);
+	void set_trail_section_subdivisions(int p_subdivisions);
 
 	bool is_emitting() const;
 	int get_amount() const;
@@ -98,6 +116,12 @@ public:
 	Ref<Material> get_process_material() const;
 	float get_speed_scale() const;
 
+	float get_collision_base_size() const;
+	bool is_trail_enabled() const;
+	float get_trail_length() const;
+	int get_trail_sections() const;
+	int get_trail_section_subdivisions() const;
+
 	void set_fixed_fps(int p_count);
 	int get_fixed_fps() const;
 
@@ -110,7 +134,7 @@ public:
 	void set_texture(const Ref<Texture2D> &p_texture);
 	Ref<Texture2D> get_texture() const;
 
-	virtual String get_configuration_warning() const override;
+	TypedArray<String> get_configuration_warnings() const override;
 
 	void restart();
 	Rect2 capture_rect() const;

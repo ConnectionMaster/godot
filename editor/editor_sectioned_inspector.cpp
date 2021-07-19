@@ -116,12 +116,12 @@ public:
 	void set_section(const String &p_section, bool p_allow_sub) {
 		section = p_section;
 		allow_sub = p_allow_sub;
-		_change_notify();
+		notify_property_list_changed();
 	}
 
 	void set_edited(Object *p_edited) {
 		edited = p_edited;
-		_change_notify();
+		notify_property_list_changed();
 	}
 };
 
@@ -135,7 +135,7 @@ void SectionedInspector::_section_selected() {
 	}
 
 	selected_category = sections->get_selected()->get_metadata(0);
-	filter->set_section(selected_category, sections->get_selected()->get_children() == nullptr);
+	filter->set_section(selected_category, sections->get_selected()->get_first_child() == nullptr);
 	inspector->set_property_prefix(selected_category + "/");
 }
 
@@ -187,8 +187,8 @@ void SectionedInspector::edit(Object *p_object) {
 
 		TreeItem *first_item = sections->get_root();
 		if (first_item) {
-			while (first_item->get_children()) {
-				first_item = first_item->get_children();
+			while (first_item->get_first_child()) {
+				first_item = first_item->get_first_child();
 			}
 
 			first_item->select(0);
@@ -226,7 +226,7 @@ void SectionedInspector::update_category_list() {
 
 		if (pi.usage & PROPERTY_USAGE_CATEGORY) {
 			continue;
-		} else if (!(pi.usage & PROPERTY_USAGE_EDITOR)) {
+		} else if (!(pi.usage & PROPERTY_USAGE_EDITOR) || (restrict_to_basic && !(pi.usage & PROPERTY_USAGE_EDITOR_BASIC_SETTING))) {
 			continue;
 		}
 
@@ -250,7 +250,8 @@ void SectionedInspector::update_category_list() {
 
 		for (int i = 0; i < sc; i++) {
 			TreeItem *parent = section_map[metasection];
-			parent->set_custom_bg_color(0, get_theme_color("prop_subsection", "Editor"));
+			//parent->set_custom_bg_color(0, get_theme_color("prop_subsection", "Editor"));
+			parent->set_custom_font(0, get_theme_font("bold", "EditorFonts"));
 
 			if (i > 0) {
 				metasection += "/" + sectionarr[i];
@@ -292,6 +293,12 @@ void SectionedInspector::_search_changed(const String &p_what) {
 
 EditorInspector *SectionedInspector::get_inspector() {
 	return inspector;
+}
+
+void SectionedInspector::set_restrict_to_basic_settings(bool p_restrict) {
+	restrict_to_basic = p_restrict;
+	update_category_list();
+	inspector->set_restrict_to_basic_settings(p_restrict);
 }
 
 SectionedInspector::SectionedInspector() :

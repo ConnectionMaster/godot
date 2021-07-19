@@ -35,16 +35,13 @@
 #include "scene/3d/node_3d.h"
 #include "scene/resources/skin.h"
 
-#ifndef _3D_DISABLED
 typedef int BoneId;
 
 class PhysicalBone3D;
-#endif // _3D_DISABLED
-
 class Skeleton3D;
 
-class SkinReference : public Reference {
-	GDCLASS(SkinReference, Reference)
+class SkinReference : public RefCounted {
+	GDCLASS(SkinReference, RefCounted)
 	friend class Skeleton3D;
 
 	Skeleton3D *skeleton_node;
@@ -74,69 +71,43 @@ private:
 	struct Bone {
 		String name;
 
-		bool enabled;
-		int parent;
-		int sort_index; //used for re-sorting process order
+		bool enabled = true;
+		int parent = -1;
+		int sort_index = 0; //used for re-sorting process order
 
-		bool disable_rest;
-		Transform rest;
+		bool disable_rest = false;
+		Transform3D rest;
 
-		Transform pose;
-		Transform pose_global;
+		Transform3D pose;
+		Transform3D pose_global;
+		Transform3D pose_global_no_override;
 
-		bool custom_pose_enable;
-		Transform custom_pose;
+		bool custom_pose_enable = false;
+		Transform3D custom_pose;
 
-		float global_pose_override_amount;
-		bool global_pose_override_reset;
-		Transform global_pose_override;
+		float global_pose_override_amount = 0.0;
+		bool global_pose_override_reset = false;
+		Transform3D global_pose_override;
 
-#ifndef _3D_DISABLED
-		PhysicalBone3D *physical_bone;
-		PhysicalBone3D *cache_parent_physical_bone;
-#endif // _3D_DISABLED
+		PhysicalBone3D *physical_bone = nullptr;
+		PhysicalBone3D *cache_parent_physical_bone = nullptr;
 
 		List<ObjectID> nodes_bound;
-
-		Bone() {
-			parent = -1;
-			enabled = true;
-			disable_rest = false;
-			custom_pose_enable = false;
-			global_pose_override_amount = 0;
-			global_pose_override_reset = false;
-#ifndef _3D_DISABLED
-			physical_bone = nullptr;
-			cache_parent_physical_bone = nullptr;
-#endif // _3D_DISABLED
-		}
 	};
 
 	Set<SkinReference *> skin_bindings;
 
 	void _skin_changed();
 
-	bool animate_physical_bones;
+	bool animate_physical_bones = true;
 	Vector<Bone> bones;
 	Vector<int> process_order;
-	bool process_order_dirty;
+	bool process_order_dirty = true;
 
 	void _make_dirty();
-	bool dirty;
+	bool dirty = false;
 
-	uint64_t version;
-
-	// bind helpers
-	Array _get_bound_child_nodes_to_bone(int p_bone) const {
-		Array bound;
-		List<Node *> children;
-		get_bound_child_nodes_to_bone(p_bone, &children);
-
-		for (int i = 0; i < children.size(); i++) {
-			bound.push_back(children[i]);
-		}
-		return bound;
-	}
+	uint64_t version = 1;
 
 	void _update_process_order();
 
@@ -156,6 +127,7 @@ public:
 	void add_bone(const String &p_name);
 	int find_bone(const String &p_name) const;
 	String get_bone_name(int p_bone) const;
+	void set_bone_name(int p_bone, const String &p_name);
 
 	bool is_bone_parent_of(int p_bone_id, int p_parent_bone_id) const;
 
@@ -169,12 +141,13 @@ public:
 
 	int get_bone_count() const;
 
-	void set_bone_rest(int p_bone, const Transform &p_rest);
-	Transform get_bone_rest(int p_bone) const;
-	Transform get_bone_global_pose(int p_bone) const;
+	void set_bone_rest(int p_bone, const Transform3D &p_rest);
+	Transform3D get_bone_rest(int p_bone) const;
+	Transform3D get_bone_global_pose(int p_bone) const;
+	Transform3D get_bone_global_pose_no_override(int p_bone) const;
 
 	void clear_bones_global_pose_override();
-	void set_bone_global_pose_override(int p_bone, const Transform &p_pose, float p_amount, bool p_persistent = false);
+	void set_bone_global_pose_override(int p_bone, const Transform3D &p_pose, float p_amount, bool p_persistent = false);
 
 	void set_bone_enabled(int p_bone, bool p_enabled);
 	bool is_bone_enabled(int p_bone) const;
@@ -187,11 +160,11 @@ public:
 
 	// posing api
 
-	void set_bone_pose(int p_bone, const Transform &p_pose);
-	Transform get_bone_pose(int p_bone) const;
+	void set_bone_pose(int p_bone, const Transform3D &p_pose);
+	Transform3D get_bone_pose(int p_bone) const;
 
-	void set_bone_custom_pose(int p_bone, const Transform &p_custom_pose);
-	Transform get_bone_custom_pose(int p_bone) const;
+	void set_bone_custom_pose(int p_bone, const Transform3D &p_custom_pose);
+	Transform3D get_bone_custom_pose(int p_bone) const;
 
 	void localize_rests(); // used for loaders and tools
 	int get_process_order(int p_idx);
@@ -200,10 +173,9 @@ public:
 	Ref<SkinReference> register_skin(const Ref<Skin> &p_skin);
 
 	// Helper functions
-	Transform bone_transform_to_world_transform(Transform p_transform);
-	Transform world_transform_to_bone_transform(Transform p_transform);
+	Transform3D bone_transform_to_world_transform(Transform3D p_transform);
+	Transform3D world_transform_to_bone_transform(Transform3D p_transform);
 
-#ifndef _3D_DISABLED
 	// Physical bone API
 
 	void set_animate_physical_bones(bool p_animate);
@@ -225,7 +197,6 @@ public:
 	void physical_bones_start_simulation_on(const TypedArray<StringName> &p_bones);
 	void physical_bones_add_collision_exception(RID p_exception);
 	void physical_bones_remove_collision_exception(RID p_exception);
-#endif // _3D_DISABLED
 
 public:
 	Skeleton3D();

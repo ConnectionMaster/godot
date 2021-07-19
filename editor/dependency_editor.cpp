@@ -30,8 +30,8 @@
 
 #include "dependency_editor.h"
 
+#include "core/io/file_access.h"
 #include "core/io/resource_loader.h"
-#include "core/os/file_access.h"
 #include "editor_node.h"
 #include "editor_scale.h"
 #include "scene/gui/margin_container.h"
@@ -86,11 +86,11 @@ void DependencyEditor::_fix_and_find(EditorFileSystemDirectory *efsd, Map<String
 			String lost = E->key().replace_first("res://", "");
 
 			Vector<String> existingv = existing.split("/");
-			existingv.invert();
+			existingv.reverse();
 			Vector<String> currentv = current.split("/");
-			currentv.invert();
+			currentv.reverse();
 			Vector<String> lostv = lost.split("/");
-			lostv.invert();
+			lostv.reverse();
 
 			int existing_score = 0;
 			int current_score = 0;
@@ -226,12 +226,18 @@ DependencyEditor::DependencyEditor() {
 	tree->set_columns(2);
 	tree->set_column_titles_visible(true);
 	tree->set_column_title(0, TTR("Resource"));
+	tree->set_column_clip_content(0, true);
+	tree->set_column_expand_ratio(0, 2);
 	tree->set_column_title(1, TTR("Path"));
+	tree->set_column_clip_content(1, true);
+	tree->set_column_expand_ratio(1, 1);
 	tree->set_hide_root(true);
 	tree->connect("button_pressed", callable_mp(this, &DependencyEditor::_load_pressed));
 
 	HBoxContainer *hbc = memnew(HBoxContainer);
 	Label *label = memnew(Label(TTR("Dependencies:")));
+	label->set_theme_type_variation("HeaderSmall");
+
 	hbc->add_child(label);
 	hbc->add_spacer();
 	fixdeps = memnew(Button(TTR("Fix Broken")));
@@ -480,8 +486,8 @@ void DependencyRemoveDialog::ok_pressed() {
 		if (files_to_delete[i] == String(ProjectSettings::get_singleton()->get("application/boot_splash/image"))) {
 			ProjectSettings::get_singleton()->set("application/boot_splash/image", "");
 		}
-		if (files_to_delete[i] == String(ProjectSettings::get_singleton()->get("rendering/environment/default_environment"))) {
-			ProjectSettings::get_singleton()->set("rendering/environment/default_environment", "");
+		if (files_to_delete[i] == String(ProjectSettings::get_singleton()->get("rendering/environment/defaults/default_environment"))) {
+			ProjectSettings::get_singleton()->set("rendering/environment/defaults/default_environment", "");
 		}
 		if (files_to_delete[i] == String(ProjectSettings::get_singleton()->get("display/mouse_cursor/custom_image"))) {
 			ProjectSettings::get_singleton()->set("display/mouse_cursor/custom_image", "");
@@ -492,8 +498,8 @@ void DependencyRemoveDialog::ok_pressed() {
 		if (files_to_delete[i] == String(ProjectSettings::get_singleton()->get("gui/theme/custom_font"))) {
 			ProjectSettings::get_singleton()->set("gui/theme/custom_font", "");
 		}
-		if (files_to_delete[i] == String(ProjectSettings::get_singleton()->get("audio/default_bus_layout"))) {
-			ProjectSettings::get_singleton()->set("audio/default_bus_layout", "");
+		if (files_to_delete[i] == String(ProjectSettings::get_singleton()->get("audio/buses/default_bus_layout"))) {
+			ProjectSettings::get_singleton()->set("audio/buses/default_bus_layout", "");
 		}
 
 		String path = OS::get_singleton()->get_resource_dir() + files_to_delete[i].replace_first("res://", "/");
@@ -725,8 +731,8 @@ void OrphanResourcesDialog::_find_to_delete(TreeItem *p_item, List<String> &path
 			paths.push_back(p_item->get_metadata(0));
 		}
 
-		if (p_item->get_children()) {
-			_find_to_delete(p_item->get_children(), paths);
+		if (p_item->get_first_child()) {
+			_find_to_delete(p_item->get_first_child(), paths);
 		}
 
 		p_item = p_item->get_next();
@@ -769,9 +775,11 @@ OrphanResourcesDialog::OrphanResourcesDialog() {
 	files = memnew(Tree);
 	files->set_columns(2);
 	files->set_column_titles_visible(true);
-	files->set_column_min_width(1, 100);
+	files->set_column_custom_minimum_width(1, 100 * EDSCALE);
 	files->set_column_expand(0, true);
+	files->set_column_clip_content(0, true);
 	files->set_column_expand(1, false);
+	files->set_column_clip_content(1, true);
 	files->set_column_title(0, TTR("Resource"));
 	files->set_column_title(1, TTR("Owns"));
 	files->set_hide_root(true);

@@ -92,14 +92,11 @@ private:
 			Vector<Vector2i> bidi_override;
 			Ref<TextParagraph> data_buf;
 
-			bool marked;
-			bool hidden;
+			Color background_color = Color(0, 0, 0, 0);
+			bool hidden = false;
 
 			Line() {
-				data_buf.instance();
-
-				marked = false;
-				hidden = false;
+				data_buf.instantiate();
 			}
 		};
 
@@ -115,11 +112,12 @@ private:
 
 		int width = -1;
 
-		int indent_size = 4;
+		int tab_size = 4;
 		int gutter_count = 0;
 
 	public:
-		void set_indent_size(int p_indent_size);
+		void set_tab_size(int p_tab_size);
+		int get_tab_size() const;
 		void set_font(const Ref<Font> &p_font);
 		void set_font_size(int p_font_size);
 		void set_font_features(const Dictionary &p_features);
@@ -127,17 +125,16 @@ private:
 		void set_draw_control_chars(bool p_draw_control_chars);
 
 		int get_line_height(int p_line, int p_wrap_index) const;
-		int get_line_width(int p_line) const;
+		int get_line_width(int p_line, int p_wrap_index = -1) const;
 		int get_max_width(bool p_exclude_hidden = false) const;
 
 		void set_width(float p_width);
 		int get_line_wrap_amount(int p_line) const;
+
 		Vector<Vector2i> get_line_wrap_ranges(int p_line) const;
 		const Ref<TextParagraph> get_line_data(int p_line) const;
 
 		void set(int p_line, const String &p_text, const Vector<Vector2i> &p_bidi_override);
-		void set_marked(int p_line, bool p_marked) { text.write[p_line].marked = p_marked; }
-		bool is_marked(int p_line) const { return text[p_line].marked; }
 		void set_hidden(int p_line, bool p_hidden) { text.write[p_line].hidden = p_hidden; }
 		bool is_hidden(int p_line) const { return text[p_line].hidden; }
 		void insert(int p_at, const String &p_text, const Vector<Vector2i> &p_bidi_override);
@@ -170,49 +167,40 @@ private:
 
 		void set_line_gutter_clickable(int p_line, int p_gutter, bool p_clickable) { text.write[p_line].gutters.write[p_gutter].clickable = p_clickable; }
 		bool is_line_gutter_clickable(int p_line, int p_gutter) const { return text[p_line].gutters[p_gutter].clickable; }
+
+		/* Line style. */
+		void set_line_background_color(int p_line, const Color &p_color) { text.write[p_line].background_color = p_color; }
+		const Color get_line_background_color(int p_line) const { return text[p_line].background_color; }
 	};
 
 	struct Cursor {
-		int last_fit_x;
-		int line, column; ///< cursor
-		int x_ofs, line_ofs, wrap_ofs;
-		Cursor() {
-			last_fit_x = 0;
-			line = 0;
-			column = 0; ///< cursor
-			x_ofs = 0;
-			line_ofs = 0;
-			wrap_ofs = 0;
-		}
+		Point2 draw_pos;
+		bool visible = false;
+		int last_fit_x = 0;
+		int line = 0;
+		int column = 0; ///< cursor
+		int x_ofs = 0;
+		int line_ofs = 0;
+		int wrap_ofs = 0;
 	} cursor;
 
 	struct Selection {
-		SelectionMode selecting_mode;
-		int selecting_line, selecting_column;
-		int selected_word_beg, selected_word_end, selected_word_origin;
-		bool selecting_text;
+		SelectionMode selecting_mode = SelectionMode::SELECTION_MODE_NONE;
+		int selecting_line = 0;
+		int selecting_column = 0;
+		int selected_word_beg = 0;
+		int selected_word_end = 0;
+		int selected_word_origin = 0;
+		bool selecting_text = false;
 
-		bool active;
+		bool active = false;
 
-		int from_line, from_column;
-		int to_line, to_column;
+		int from_line = 0;
+		int from_column = 0;
+		int to_line = 0;
+		int to_column = 0;
 
-		bool shiftclick_left;
-		Selection() {
-			selecting_mode = SelectionMode::SELECTION_MODE_NONE;
-			selecting_line = 0;
-			selecting_column = 0;
-			selected_word_beg = 0;
-			selected_word_end = 0;
-			selected_word_origin = 0;
-			selecting_text = false;
-			active = false;
-			from_line = 0;
-			from_column = 0;
-			to_line = 0;
-			to_column = 0;
-			shiftclick_left = false;
-		}
+		bool shiftclick_left = false;
 	} selection;
 
 	Map<int, Dictionary> syntax_highlighting_cache;
@@ -224,25 +212,16 @@ private:
 			TYPE_REMOVE
 		};
 
-		Type type;
-		int from_line, from_column;
-		int to_line, to_column;
+		Type type = TYPE_NONE;
+		int from_line = 0;
+		int from_column = 0;
+		int to_line = 0;
+		int to_column = 0;
 		String text;
-		uint32_t prev_version;
-		uint32_t version;
-		bool chain_forward;
-		bool chain_backward;
-		TextOperation() {
-			type = TYPE_NONE;
-			from_line = 0;
-			from_column = 0;
-			to_line = 0;
-			to_column = 0;
-			prev_version = 0;
-			version = 0;
-			chain_forward = false;
-			chain_backward = false;
-		}
+		uint32_t prev_version = 0;
+		uint32_t version = 0;
+		bool chain_forward = false;
+		bool chain_backward = false;
 	};
 
 	String ime_text;
@@ -251,7 +230,7 @@ private:
 	TextOperation current_op;
 
 	List<TextOperation> undo_stack;
-	List<TextOperation>::Element *undo_stack_pos;
+	List<TextOperation>::Element *undo_stack_pos = nullptr;
 	int undo_stack_max_size;
 
 	void _clear_redo();
@@ -263,21 +242,7 @@ private:
 
 	Dictionary _get_line_syntax_highlighting(int p_line);
 
-	Set<String> completion_prefixes;
-	bool completion_enabled;
-	List<ScriptCodeCompletionOption> completion_sources;
-	Vector<ScriptCodeCompletionOption> completion_options;
-	bool completion_active;
-	bool completion_forced;
-	ScriptCodeCompletionOption completion_current;
-	String completion_base;
-	int completion_index;
-	Rect2i completion_rect;
-	int completion_line_ofs;
-	String completion_hint;
-	int completion_hint_offset;
-
-	bool setting_text;
+	bool setting_text = false;
 
 	// data
 	Text text;
@@ -290,93 +255,85 @@ private:
 	Array st_args;
 	bool draw_control_chars = false;
 
-	uint32_t version;
-	uint32_t saved_version;
+	uint32_t version = 0;
+	uint32_t saved_version = 0;
 
-	int max_chars;
-	bool readonly;
-	bool indent_using_spaces;
-	int indent_size;
-	String space_indent;
+	bool readonly = true; // Initialise to opposite first, so we get past the early-out in set_readonly.
 
 	Timer *caret_blink_timer;
-	bool caret_blink_enabled;
-	bool draw_caret;
-	bool window_has_focus;
-	bool block_caret;
-	bool right_click_moves_caret;
+	bool caret_blink_enabled = false;
+	bool draw_caret = true;
+	bool window_has_focus = true;
+	bool block_caret = false;
+	bool right_click_moves_caret = true;
 	bool mid_grapheme_caret_enabled = false;
 
-	bool wrap_enabled;
-	int wrap_at;
-	int wrap_right_offset;
+	bool wrap_enabled = false;
+	int wrap_at = 0;
+	int wrap_right_offset = 10;
 
-	bool first_draw;
-	bool setting_row;
-	bool draw_tabs;
-	bool draw_spaces;
-	bool override_selected_font_color;
-	bool cursor_changed_dirty;
-	bool text_changed_dirty;
-	bool undo_enabled;
-	bool line_length_guidelines;
-	int line_length_guideline_soft_col;
-	int line_length_guideline_hard_col;
-	bool hiding_enabled;
-	bool draw_minimap;
-	int minimap_width;
-	Point2 minimap_char_size;
-	int minimap_line_spacing;
+	bool first_draw = true;
+	bool setting_row = false;
+	bool draw_tabs = false;
+	bool draw_spaces = false;
+	bool override_selected_font_color = false;
+	bool cursor_changed_dirty = false;
+	bool text_changed_dirty = false;
+	bool undo_enabled = true;
+	bool line_length_guidelines = false;
+	int line_length_guideline_soft_col = 80;
+	int line_length_guideline_hard_col = 100;
+	bool hiding_enabled = false;
+	bool draw_minimap = false;
+	int minimap_width = 80;
+	Point2 minimap_char_size = Point2(1, 2);
+	int minimap_line_spacing = 1;
 
-	bool highlight_all_occurrences;
-	bool scroll_past_end_of_file_enabled;
-	bool auto_brace_completion_enabled;
-	bool brace_matching_enabled;
-	bool highlight_current_line;
-	bool auto_indent;
+	bool highlight_all_occurrences = false;
+	bool scroll_past_end_of_file_enabled = false;
+	bool brace_matching_enabled = false;
+	bool highlight_current_line = false;
+
 	String cut_copy_line;
-	bool insert_mode;
-	bool select_identifiers_enabled;
+	bool insert_mode = false;
+	bool select_identifiers_enabled = false;
 
-	bool smooth_scroll_enabled;
-	bool scrolling;
-	bool dragging_selection;
-	bool dragging_minimap;
-	bool can_drag_minimap;
-	bool minimap_clicked;
-	double minimap_scroll_ratio;
-	double minimap_scroll_click_pos;
-	float target_v_scroll;
-	float v_scroll_speed;
+	bool smooth_scroll_enabled = false;
+	bool scrolling = false;
+	bool dragging_selection = false;
+	bool dragging_minimap = false;
+	bool can_drag_minimap = false;
+	bool minimap_clicked = false;
+	double minimap_scroll_ratio = 0.0;
+	double minimap_scroll_click_pos = 0.0;
+	float target_v_scroll = 0.0;
+	float v_scroll_speed = 80.0;
 
 	String highlighted_word;
 
-	uint64_t last_dblclk;
+	uint64_t last_dblclk = 0;
 
 	Timer *idle_detect;
 	Timer *click_select_held;
 	HScrollBar *h_scroll;
 	VScrollBar *v_scroll;
-	bool updating_scrolls;
+	bool updating_scrolls = false;
 
-	Object *tooltip_obj;
+	Object *tooltip_obj = nullptr;
 	StringName tooltip_func;
 	Variant tooltip_ud;
 
-	bool next_operation_is_complex;
-
-	bool callhint_below;
-	Vector2 callhint_offset;
+	bool next_operation_is_complex = false;
 
 	String search_text;
-	uint32_t search_flags;
-	int search_result_line;
-	int search_result_col;
+	uint32_t search_flags = 0;
+	int search_result_line = 0;
+	int search_result_col = 0;
 
-	bool selecting_enabled;
+	bool selecting_enabled = true;
 
-	bool context_menu_enabled;
-	bool shortcut_keys_enabled;
+	bool context_menu_enabled = true;
+	bool shortcut_keys_enabled = true;
 	bool virtual_keyboard_enabled = true;
 
 	void _generate_context_menu();
@@ -388,11 +345,8 @@ private:
 
 	void update_cursor_wrap_offset();
 	void _update_wrap_at(bool p_force = false);
-	bool line_wraps(int line) const;
-	int times_line_wraps(int line) const;
 	Vector<String> get_wrap_rows_text(int p_line) const;
 	int get_cursor_wrap_index() const;
-	int get_line_wrap_index_at_col(int p_line, int p_column) const;
 	int get_char_count();
 
 	double get_scroll_pos_for_line(int p_line, int p_wrap_index = 0) const;
@@ -400,8 +354,8 @@ private:
 	void set_line_as_center_visible(int p_line, int p_wrap_index = 0);
 	void set_line_as_last_visible(int p_line, int p_wrap_index = 0);
 	int get_first_visible_line() const;
-	int get_last_visible_line() const;
-	int get_last_visible_line_wrap_index() const;
+	int get_last_full_visible_line() const;
+	int get_last_full_visible_line_wrap_index() const;
 	double get_visible_rows_offset() const;
 	double get_v_scroll_offset() const;
 
@@ -435,6 +389,7 @@ private:
 	int _get_control_height() const;
 
 	Point2 _get_local_mouse_pos() const;
+	int _get_menu_action_accelerator(const String &p_action);
 
 	void _reset_caret_blink_timer();
 	void _toggle_draw_caret();
@@ -455,20 +410,34 @@ private:
 
 	Dictionary _search_bind(const String &p_key, uint32_t p_search_flags, int p_from_line, int p_from_column) const;
 
-	PopupMenu *menu;
-	PopupMenu *menu_dir;
-	PopupMenu *menu_ctl;
+	PopupMenu *menu = nullptr;
+	PopupMenu *menu_dir = nullptr;
+	PopupMenu *menu_ctl = nullptr;
+
+	void _ensure_menu();
 
 	void _clear();
-	void _cancel_completion();
-	void _cancel_code_hint();
-	void _confirm_completion();
-	void _update_completion_candidates();
 
-	int _calculate_spaces_till_next_left_indent(int column);
-	int _calculate_spaces_till_next_right_indent(int column);
+	// Methods used in shortcuts
+	void _swap_current_input_direction();
+	void _new_line(bool p_split_current = true, bool p_above = false);
+	void _move_cursor_left(bool p_select, bool p_move_by_word = false);
+	void _move_cursor_right(bool p_select, bool p_move_by_word = false);
+	void _move_cursor_up(bool p_select);
+	void _move_cursor_down(bool p_select);
+	void _move_cursor_to_line_start(bool p_select);
+	void _move_cursor_to_line_end(bool p_select);
+	void _move_cursor_page_up(bool p_select);
+	void _move_cursor_page_down(bool p_select);
+	void _do_backspace(bool p_word = false, bool p_all_to_left = false);
+	void _delete(bool p_word = false, bool p_all_to_right = false);
+	void _move_cursor_document_start(bool p_select);
+	void _move_cursor_document_end(bool p_select);
+	void _handle_unicode_character(uint32_t unicode, bool p_had_selection);
 
 protected:
+	bool auto_brace_completion_enabled = false;
+
 	struct Cache {
 		Ref<Texture2D> tab_icon;
 		Ref<Texture2D> space_icon;
@@ -477,18 +446,15 @@ protected:
 		Ref<StyleBox> style_focus;
 		Ref<StyleBox> style_readonly;
 		Ref<Font> font;
-		int font_size;
-		Color completion_background_color;
-		Color completion_selected_color;
-		Color completion_existing_color;
-		Color completion_font_color;
+		int font_size = 16;
+		int outline_size = 0;
+		Color outline_color;
 		Color caret_color;
 		Color caret_background_color;
 		Color font_color;
-		Color font_color_selected;
-		Color font_color_readonly;
+		Color font_selected_color;
+		Color font_readonly_color;
 		Color selection_color;
-		Color mark_color;
 		Color code_folding_color;
 		Color current_line_color;
 		Color line_length_guideline_color;
@@ -498,12 +464,8 @@ protected:
 		Color search_result_border_color;
 		Color background_color;
 
-		int line_spacing;
-		int minimap_width;
-		Cache() {
-			line_spacing = 0;
-			minimap_width = 0;
-		}
+		int line_spacing = 1;
+		int minimap_width = 0;
 	} cache;
 
 	virtual String get_tooltip(const Point2 &p_pos) const override;
@@ -511,7 +473,7 @@ protected:
 	void _insert_text(int p_line, int p_char, const String &p_text, int *r_end_line = nullptr, int *r_end_char = nullptr);
 	void _remove_text(int p_from_line, int p_from_column, int p_to_line, int p_to_column);
 	void _insert_text_at_cursor(const String &p_text);
-	void _gui_input(const Ref<InputEvent> &p_gui_input);
+	virtual void _gui_input(const Ref<InputEvent> &p_gui_input);
 	void _notification(int p_what);
 
 	void _consume_pair_symbol(char32_t ch);
@@ -541,6 +503,7 @@ public:
 
 	void set_gutter_width(int p_gutter, int p_width);
 	int get_gutter_width(int p_gutter) const;
+	int get_total_gutter_width() const;
 
 	void set_gutter_draw(int p_gutter, bool p_draw);
 	bool is_gutter_drawn(int p_gutter) const;
@@ -550,6 +513,8 @@ public:
 
 	void set_gutter_overwritable(int p_gutter, bool p_overwritable);
 	bool is_gutter_overwritable(int p_gutter) const;
+
+	void merge_gutters(int p_from_line, int p_to_line);
 
 	void set_gutter_custom_draw(int p_gutter, Object *p_object, const StringName &p_callback);
 
@@ -568,6 +533,10 @@ public:
 
 	void set_line_gutter_clickable(int p_line, int p_gutter, bool p_clickable);
 	bool is_line_gutter_clickable(int p_line, int p_gutter) const;
+
+	// Line style
+	void set_line_background_color(int p_line, const Color &p_color);
+	Color get_line_background_color(int p_line);
 
 	enum MenuItems {
 		MENU_CUT,
@@ -645,33 +614,24 @@ public:
 	void insert_text_at_cursor(const String &p_text);
 	void insert_at(const String &p_text, int at);
 	int get_line_count() const;
-	void set_line_as_marked(int p_line, bool p_marked);
+	int get_line_width(int p_line, int p_wrap_offset = -1) const;
+	int get_line_wrap_index_at_col(int p_line, int p_column) const;
 
 	void set_line_as_hidden(int p_line, bool p_hidden);
 	bool is_line_hidden(int p_line) const;
-	void fold_all_lines();
 	void unhide_all_lines();
 	int num_lines_from(int p_line_from, int visible_amount) const;
 	int num_lines_from_rows(int p_line_from, int p_wrap_index_from, int visible_amount, int &wrap_index) const;
 	int get_last_unhidden_line() const;
 
-	bool can_fold(int p_line) const;
-	bool is_folded(int p_line) const;
-	Vector<int> get_folded_lines() const;
-	void fold_line(int p_line);
-	void unfold_line(int p_line);
-	void toggle_fold_line(int p_line);
-
 	String get_text();
 	String get_line(int line) const;
+	bool has_ime_text() const;
 	void set_line(int line, String new_text);
 	int get_row_height() const;
-	void backspace_at_cursor();
 
-	void indent_left();
-	void indent_right();
 	int get_indent_level(int p_line) const;
-	bool is_line_comment(int p_line) const;
+	int get_first_non_whitespace_column(int p_line) const;
 
 	inline void set_scroll_pass_end_of_file(bool p_enabled) {
 		scroll_past_end_of_file_enabled = p_enabled;
@@ -684,11 +644,6 @@ public:
 		brace_matching_enabled = p_enabled;
 		update();
 	}
-	inline void set_callhint_settings(bool below, Vector2 offset) {
-		callhint_below = below;
-		callhint_offset = offset;
-	}
-	void set_auto_indent(bool p_auto_indent);
 
 	void center_viewport_to_cursor();
 
@@ -698,6 +653,8 @@ public:
 	void cursor_set_column(int p_col, bool p_adjust_viewport = true);
 	void cursor_set_line(int p_row, bool p_adjust_viewport = true, bool p_can_be_hidden = true, int p_wrap_index = 0);
 
+	Point2 get_caret_draw_pos() const;
+	bool is_caret_visible() const;
 	int cursor_get_column() const;
 	int cursor_get_line() const;
 	Vector2i _get_cursor_pixel_pos(bool p_adjust_viewport = true);
@@ -722,18 +679,21 @@ public:
 	void set_readonly(bool p_readonly);
 	bool is_readonly() const;
 
-	void set_max_chars(int p_max_chars);
-	int get_max_chars() const;
-
 	void set_wrap_enabled(bool p_wrap_enabled);
 	bool is_wrap_enabled() const;
+	bool line_wraps(int line) const;
+	int times_line_wraps(int line) const;
 
 	void clear();
 
+	void delete_selection();
+
+	virtual void backspace();
 	void cut();
 	void copy();
 	void paste();
 	void select_all();
+	void select_word_under_caret();
 	void select(int p_from_line, int p_from_column, int p_to_line, int p_to_column);
 	void deselect();
 	void swap_lines(int line1, int line2);
@@ -760,10 +720,8 @@ public:
 	void redo();
 	void clear_undo_history();
 
-	void set_indent_using_spaces(const bool p_use_spaces);
-	bool is_indent_using_spaces() const;
-	void set_indent_size(const int p_size);
-	int get_indent_size();
+	void set_tab_size(const int p_size);
+	int get_tab_size() const;
 	void set_draw_tabs(bool p_draw);
 	bool is_drawing_tabs() const;
 	void set_draw_spaces(bool p_draw);
@@ -773,9 +731,6 @@ public:
 
 	void set_insert_mode(bool p_enabled);
 	bool is_insert_mode() const;
-
-	void add_keyword(const String &p_keyword);
-	void clear_keywords();
 
 	double get_v_scroll() const;
 	void set_v_scroll(double p_scroll);
@@ -813,11 +768,6 @@ public:
 
 	void set_tooltip_request_func(Object *p_obj, const StringName &p_function, const Variant &p_udata);
 
-	void set_completion(bool p_enabled, const Vector<String> &p_prefixes);
-	void code_complete(const List<ScriptCodeCompletionOption> &p_strings, bool p_forced = false);
-	void set_code_hint(const String &p_hint);
-	void query_code_comple();
-
 	void set_select_identifiers_on_hover(bool p_enable);
 	bool is_selecting_identifiers_on_hover_enabled() const;
 
@@ -833,9 +783,9 @@ public:
 	void set_virtual_keyboard_enabled(bool p_enable);
 	bool is_virtual_keyboard_enabled() const;
 
+	bool is_menu_visible() const;
 	PopupMenu *get_menu() const;
 
-	String get_text_for_completion();
 	String get_text_for_lookup_completion();
 
 	virtual bool is_text_field() const override;

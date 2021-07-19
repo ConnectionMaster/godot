@@ -30,7 +30,7 @@
 
 #include "shader.h"
 
-#include "core/os/file_access.h"
+#include "core/io/file_access.h"
 #include "scene/scene_string_names.h"
 #include "servers/rendering/shader_language.h"
 #include "servers/rendering_server.h"
@@ -152,9 +152,7 @@ void Shader::_bind_methods() {
 }
 
 Shader::Shader() {
-	mode = MODE_SPATIAL;
 	shader = RenderingServer::get_singleton()->shader_create();
-	params_cache_dirty = true;
 }
 
 Shader::~Shader() {
@@ -163,13 +161,13 @@ Shader::~Shader() {
 
 ////////////
 
-RES ResourceFormatLoaderShader::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress, bool p_no_cache) {
+RES ResourceFormatLoaderShader::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress, CacheMode p_cache_mode) {
 	if (r_error) {
 		*r_error = ERR_FILE_CANT_OPEN;
 	}
 
 	Ref<Shader> shader;
-	shader.instance();
+	shader.instantiate();
 
 	Vector<uint8_t> buffer = FileAccess::get_file_as_array(p_path);
 
@@ -186,7 +184,7 @@ RES ResourceFormatLoaderShader::load(const String &p_path, const String &p_origi
 }
 
 void ResourceFormatLoaderShader::get_recognized_extensions(List<String> *p_extensions) const {
-	p_extensions->push_back("shader");
+	p_extensions->push_back("gdshader");
 }
 
 bool ResourceFormatLoaderShader::handles_type(const String &p_type) const {
@@ -195,7 +193,7 @@ bool ResourceFormatLoaderShader::handles_type(const String &p_type) const {
 
 String ResourceFormatLoaderShader::get_resource_type(const String &p_path) const {
 	String el = p_path.get_extension().to_lower();
-	if (el == "shader") {
+	if (el == "gdshader") {
 		return "Shader";
 	}
 	return "";
@@ -226,7 +224,7 @@ Error ResourceFormatSaverShader::save(const String &p_path, const RES &p_resourc
 void ResourceFormatSaverShader::get_recognized_extensions(const RES &p_resource, List<String> *p_extensions) const {
 	if (const Shader *shader = Object::cast_to<Shader>(*p_resource)) {
 		if (shader->is_text_shader()) {
-			p_extensions->push_back("shader");
+			p_extensions->push_back("gdshader");
 		}
 	}
 }

@@ -35,7 +35,7 @@ void RemoteTransform2D::_update_cache() {
 	cache = ObjectID();
 	if (has_node(remote_node)) {
 		Node *node = get_node(remote_node);
-		if (!node || this == node || node->is_a_parent_of(this) || this->is_a_parent_of(node)) {
+		if (!node || this == node || node->is_ancestor_of(this) || this->is_ancestor_of(node)) {
 			return;
 		}
 
@@ -138,7 +138,7 @@ void RemoteTransform2D::set_remote_node(const NodePath &p_remote_node) {
 		_update_remote();
 	}
 
-	update_configuration_warning();
+	update_configuration_warnings();
 }
 
 NodePath RemoteTransform2D::get_remote_node() const {
@@ -185,17 +185,14 @@ void RemoteTransform2D::force_update_cache() {
 	_update_cache();
 }
 
-String RemoteTransform2D::get_configuration_warning() const {
-	String warning = Node2D::get_configuration_warning();
+TypedArray<String> RemoteTransform2D::get_configuration_warnings() const {
+	TypedArray<String> warnings = Node::get_configuration_warnings();
 
 	if (!has_node(remote_node) || !Object::cast_to<Node2D>(get_node(remote_node))) {
-		if (!warning.is_empty()) {
-			warning += "\n\n";
-		}
-		warning += TTR("Path property must point to a valid Node2D node to work.");
+		warnings.push_back(TTR("Path property must point to a valid Node2D node to work."));
 	}
 
-	return warning;
+	return warnings;
 }
 
 void RemoteTransform2D::_bind_methods() {
@@ -223,10 +220,5 @@ void RemoteTransform2D::_bind_methods() {
 }
 
 RemoteTransform2D::RemoteTransform2D() {
-	use_global_coordinates = true;
-	update_remote_position = true;
-	update_remote_rotation = true;
-	update_remote_scale = true;
-
 	set_notify_transform(true);
 }

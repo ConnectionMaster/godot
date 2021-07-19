@@ -34,7 +34,7 @@
 #include "scene/resources/texture.h"
 
 #ifdef TOOLS_ENABLED
-#include <basisu_comp.h>
+#include <encoder/basisu_comp.h>
 #endif
 
 #include <transcoder/basisu_transcoder.h>
@@ -47,7 +47,7 @@ class TextureBasisU : public Texture {
 	RID texture;
 	Size2 tex_size;
 
-	uint32_t flags;
+	uint32_t flags = FLAGS_DEFAULT;
 
 	Vector<uint8_t> data;
 

@@ -547,7 +547,7 @@ struct TextDocumentItem {
 	 * The version number of this document (it will increase after each
 	 * change, including undo/redo).
 	 */
-	int version;
+	int version = 0;
 
 	/**
 	 * The content of the opened text document.
@@ -584,7 +584,7 @@ struct TextDocumentContentChangeEvent {
 	/**
 	 * The length of the range that got replaced.
 	 */
-	int rangeLength;
+	int rangeLength = 0;
 
 	/**
 	 * The new text of the range/document.
@@ -656,12 +656,12 @@ struct Diagnostic {
 	 * The diagnostic's severity. Can be omitted. If omitted it is up to the
 	 * client to interpret diagnostics as error, warning, info or hint.
 	 */
-	int severity;
+	int severity = 0;
 
 	/**
 	 * The diagnostic's code, which might appear in the user interface.
 	 */
-	int code;
+	int code = 0;
 
 	/**
 	 * A human-readable string describing the source of this
@@ -766,7 +766,7 @@ struct MarkupContent {
 
 // Use namespace instead of enumeration to follow the LSP specifications
 // lsp::EnumName::EnumValue is OK but lsp::EnumValue is not
-// And here C++ compilers are unhappy with our enumeration name like Color, File, Reference etc.
+// And here C++ compilers are unhappy with our enumeration name like Color, File, RefCounted etc.
 /**
  * The kind of a completion entry.
  */
@@ -788,7 +788,7 @@ static const int Keyword = 14;
 static const int Snippet = 15;
 static const int Color = 16;
 static const int File = 17;
-static const int Reference = 18;
+static const int RefCounted = 18;
 static const int Folder = 19;
 static const int EnumMember = 20;
 static const int Constant = 21;
@@ -833,7 +833,7 @@ struct CompletionItem {
 	 * an icon is chosen by the editor. The standardized set
 	 * of available values is defined in `CompletionItemKind`.
 	 */
-	int kind;
+	int kind = 0;
 
 	/**
 	 * A human-readable string with additional information
@@ -891,7 +891,7 @@ struct CompletionItem {
 	 * The format of the insert text. The format applies to both the `insertText` property
 	 * and the `newText` property of a provided `textEdit`.
 	 */
-	int insertTextFormat;
+	int insertTextFormat = 0;
 
 	/**
 	 * An edit which is applied to a document when selecting this completion. When an edit is provided the value of
@@ -1003,7 +1003,7 @@ struct CompletionList {
 	 * This list it not complete. Further typing should result in recomputing
 	 * this list.
 	 */
-	bool isIncomplete;
+	bool isIncomplete = false;
 
 	/**
 	 * The completion items.
@@ -1528,6 +1528,114 @@ struct SignatureHelp {
 	}
 };
 
+/**
+ * A pattern to describe in which file operation requests or notifications
+ * the server is interested in.
+ */
+struct FileOperationPattern {
+	/**
+	 * The glob pattern to match.
+	 */
+	String glob = "**/*.gd";
+
+	/**
+	 * Whether to match `file`s or `folder`s with this pattern.
+	 *
+	 * Matches both if undefined.
+	 */
+	String matches = "file";
+
+	Dictionary to_json() const {
+		Dictionary dict;
+
+		dict["glob"] = glob;
+		dict["matches"] = matches;
+
+		return dict;
+	}
+};
+
+/**
+ * A filter to describe in which file operation requests or notifications
+ * the server is interested in.
+ */
+struct FileOperationFilter {
+	/**
+	 * The actual file operation pattern.
+	 */
+	FileOperationPattern pattern;
+
+	Dictionary to_json() const {
+		Dictionary dict;
+
+		dict["pattern"] = pattern.to_json();
+
+		return dict;
+	}
+};
+
+/**
+ * The options to register for file operations.
+ */
+struct FileOperationRegistrationOptions {
+	/**
+	 * The actual filters.
+	 */
+	Vector<FileOperationFilter> filters;
+
+	FileOperationRegistrationOptions() {
+		filters.push_back(FileOperationFilter());
+	}
+
+	Dictionary to_json() const {
+		Dictionary dict;
+
+		Array filts;
+		for (int i = 0; i < filters.size(); i++) {
+			filts.push_back(filters[i].to_json());
+		}
+		dict["filters"] = filts;
+
+		return dict;
+	}
+};
+
+/**
+ * The server is interested in file notifications/requests.
+ */
+struct FileOperations {
+	/**
+	 * The server is interested in receiving didDeleteFiles file notifications.
+	 */
+	FileOperationRegistrationOptions didDelete;
+
+	Dictionary to_json() const {
+		Dictionary dict;
+
+		dict["didDelete"] = didDelete.to_json();
+
+		return dict;
+	}
+};
+
+/**
+ * Workspace specific server capabilities
+ */
+struct Workspace {
+	/**
+	 * The server is interested in file notifications/requests.
+	 */
+	FileOperations fileOperations;
+
+	Dictionary to_json() const {
+		Dictionary dict;
+
+		dict["fileOperations"] = fileOperations.to_json();
+
+		return dict;
+	}
+};
+
 struct ServerCapabilities {
 	/**
 	 * Defines how text documents are synced. Is either a detailed structure defining each notification or
@@ -1588,6 +1696,11 @@ struct ServerCapabilities {
 	 * The server provides workspace symbol support.
 	 */
 	bool workspaceSymbolProvider = true;
+
+	/**
+	 * The server supports workspace folder.
+	 */
+	Workspace workspace;
 
 	/**
 	 * The server provides code actions. The `CodeActionOptions` return type is only
@@ -1661,7 +1774,7 @@ struct ServerCapabilities {
 		signatureHelpProvider.triggerCharacters.push_back(",");
 		signatureHelpProvider.triggerCharacters.push_back("(");
 		dict["signatureHelpProvider"] = signatureHelpProvider.to_json();
-		dict["codeLensProvider"] = false; // codeLensProvider.to_json();
+		//dict["codeLensProvider"] = codeLensProvider.to_json();
 		dict["documentOnTypeFormattingProvider"] = documentOnTypeFormattingProvider.to_json();
 		dict["renameProvider"] = renameProvider.to_json();
 		dict["documentLinkProvider"] = documentLinkProvider.to_json();
@@ -1676,6 +1789,7 @@ struct ServerCapabilities {
 		dict["documentHighlightProvider"] = documentHighlightProvider;
 		dict["documentSymbolProvider"] = documentSymbolProvider;
 		dict["workspaceSymbolProvider"] = workspaceSymbolProvider;
+		dict["workspace"] = workspace.to_json();
 		dict["codeActionProvider"] = codeActionProvider;
 		dict["documentFormattingProvider"] = documentFormattingProvider;
 		dict["documentRangeFormattingProvider"] = documentRangeFormattingProvider;

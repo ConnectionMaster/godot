@@ -51,11 +51,11 @@ void ParallaxBackground::_camera_moved(const Transform2D &p_transform, const Poi
 	set_scroll_offset(p_transform.get_origin());
 }
 
-void ParallaxBackground::set_scroll_scale(float p_scale) {
+void ParallaxBackground::set_scroll_scale(real_t p_scale) {
 	scale = p_scale;
 }
 
-float ParallaxBackground::get_scroll_scale() const {
+real_t ParallaxBackground::get_scroll_scale() const {
 	return scale;
 }
 
@@ -185,9 +185,5 @@ void ParallaxBackground::_bind_methods() {
 }
 
 ParallaxBackground::ParallaxBackground() {
-	scale = 1.0;
 	set_layer(-100); //behind all by default
-
-	base_scale = Vector2(1, 1);
-	ignore_camera_zoom = false;
 }

@@ -136,10 +136,10 @@ void AnimationNodeBlendTreeEditor::_update_graph() {
 		if (String(E->get()) != "output") {
 			LineEdit *name = memnew(LineEdit);
 			name->set_text(E->get());
-			name->set_expand_to_text_length(true);
+			name->set_expand_to_text_length_enabled(true);
 			node->add_child(name);
 			node->set_slot(0, false, 0, Color(), true, 0, get_theme_color("font_color", "Label"));
-			name->connect("text_entered", callable_mp(this, &AnimationNodeBlendTreeEditor::_node_renamed), varray(agnode));
+			name->connect("text_submitted", callable_mp(this, &AnimationNodeBlendTreeEditor::_node_renamed), varray(agnode), CONNECT_DEFERRED);
 			name->connect("focus_exited", callable_mp(this, &AnimationNodeBlendTreeEditor::_node_renamed_focus_out), varray(name, agnode), CONNECT_DEFERRED);
 			base = 1;
 			node->set_show_close_button(true);
@@ -231,18 +231,16 @@ void AnimationNodeBlendTreeEditor::_update_graph() {
 			mb->get_popup()->connect("index_pressed", callable_mp(this, &AnimationNodeBlendTreeEditor::_anim_selected), varray(options, E->get()), CONNECT_DEFERRED);
 		}
 
-		if (EditorSettings::get_singleton()->get("interface/theme/use_graph_node_headers")) {
-			Ref<StyleBoxFlat> sb = node->get_theme_stylebox("frame", "GraphNode");
-			Color c = sb->get_border_color();
-			Color mono_color = ((c.r + c.g + c.b) / 3) < 0.7 ? Color(1.0, 1.0, 1.0) : Color(0.0, 0.0, 0.0);
-			mono_color.a = 0.85;
-			c = mono_color;
+		Ref<StyleBoxFlat> sb = node->get_theme_stylebox("frame", "GraphNode");
+		Color c = sb->get_border_color();
+		Color mono_color = ((c.r + c.g + c.b) / 3) < 0.7 ? Color(1.0, 1.0, 1.0) : Color(0.0, 0.0, 0.0);
+		mono_color.a = 0.85;
+		c = mono_color;
 
-			node->add_theme_color_override("title_color", c);
-			c.a = 0.7;
-			node->add_theme_color_override("close_color", c);
-			node->add_theme_color_override("resizer_color", c);
-		}
+		node->add_theme_color_override("title_color", c);
+		c.a = 0.7;
+		node->add_theme_color_override("close_color", c);
+		node->add_theme_color_override("resizer_color", c);
 	}
 
 	List<AnimationNodeBlendTree::NodeConnection> connections;
@@ -255,6 +253,9 @@ void AnimationNodeBlendTreeEditor::_update_graph() {
 
 		graph->connect_node(from, 0, to, to_idx);
 	}
+
+	float graph_minimap_opacity = EditorSettings::get_singleton()->get("editors/visual_editors/minimap_opacity");
+	graph->set_minimap_opacity(graph_minimap_opacity);
 }
 
 void AnimationNodeBlendTreeEditor::_file_opened(const String &p_file) {
@@ -287,14 +288,14 @@ void AnimationNodeBlendTreeEditor::_add_node(int p_idx) {
 		ERR_FAIL_COND(!anode.is_valid());
 		base_name = anode->get_class();
 	} else if (add_options[p_idx].type != String()) {
-		AnimationNode *an = Object::cast_to<AnimationNode>(ClassDB::instance(add_options[p_idx].type));
+		AnimationNode *an = Object::cast_to<AnimationNode>(ClassDB::instantiate(add_options[p_idx].type));
 		ERR_FAIL_COND(!an);
 		anode = Ref<AnimationNode>(an);
 		base_name = add_options[p_idx].name;
 	} else {
 		ERR_FAIL_COND(add_options[p_idx].script.is_null());
 		String base_type = add_options[p_idx].script->get_instance_base_type();
-		AnimationNode *an = Object::cast_to<AnimationNode>(ClassDB::instance(base_type));
+		AnimationNode *an = Object::cast_to<AnimationNode>(ClassDB::instantiate(base_type));
 		ERR_FAIL_COND(!an);
 		anode = Ref<AnimationNode>(an);
 		anode->set_script(add_options[p_idx].script);
@@ -888,6 +889,8 @@ AnimationNodeBlendTreeEditor::AnimationNodeBlendTreeEditor() {
 	graph->connect("scroll_offset_changed", callable_mp(this, &AnimationNodeBlendTreeEditor::_scroll_changed));
 	graph->connect("delete_nodes_request", callable_mp(this, &AnimationNodeBlendTreeEditor::_delete_nodes_request));
 	graph->connect("popup_request", callable_mp(this, &AnimationNodeBlendTreeEditor::_popup_request));
+	float graph_minimap_opacity = EditorSettings::get_singleton()->get("editors/visual_editors/minimap_opacity");
+	graph->set_minimap_opacity(graph_minimap_opacity);
 
 	VSeparator *vs = memnew(VSeparator);
 	graph->get_zoom_hbox()->add_child(vs);

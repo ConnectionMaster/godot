@@ -31,19 +31,19 @@
 #ifndef REGEX_H
 #define REGEX_H
 
-#include "core/object/reference.h"
+#include "core/object/ref_counted.h"
 #include "core/string/ustring.h"
 #include "core/templates/map.h"
 #include "core/templates/vector.h"
 #include "core/variant/array.h"
 #include "core/variant/dictionary.h"
 
-class RegExMatch : public Reference {
-	GDCLASS(RegExMatch, Reference);
+class RegExMatch : public RefCounted {
+	GDCLASS(RegExMatch, RefCounted);
 
 	struct Range {
-		int start;
-		int end;
+		int start = 0;
+		int end = 0;
 	};
 
 	String subject;
@@ -68,11 +68,11 @@ public:
 	int get_end(const Variant &p_name) const;
 };
 
-class RegEx : public Reference {
-	GDCLASS(RegEx, Reference);
+class RegEx : public RefCounted {
+	GDCLASS(RegEx, RefCounted);
 
 	void *general_ctx;
-	void *code;
+	void *code = nullptr;
 	String pattern;
 
 	void _pattern_info(uint32_t what, void *where) const;

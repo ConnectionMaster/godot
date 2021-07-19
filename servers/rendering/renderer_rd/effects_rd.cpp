@@ -34,22 +34,8 @@
 #include "core/math/math_defs.h"
 #include "core/os/os.h"
 
+#include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "thirdparty/misc/cubemap_coeffs.h"
-
-static _FORCE_INLINE_ void store_transform_3x3(const Basis &p_basis, float *p_array) {
-	p_array[0] = p_basis.elements[0][0];
-	p_array[1] = p_basis.elements[1][0];
-	p_array[2] = p_basis.elements[2][0];
-	p_array[3] = 0;
-	p_array[4] = p_basis.elements[0][1];
-	p_array[5] = p_basis.elements[1][1];
-	p_array[6] = p_basis.elements[2][1];
-	p_array[7] = 0;
-	p_array[8] = p_basis.elements[0][2];
-	p_array[9] = p_basis.elements[1][2];
-	p_array[10] = p_basis.elements[2][2];
-	p_array[11] = 0;
-}
 
 static _FORCE_INLINE_ void store_camera(const CameraMatrix &p_mtx, float *p_array) {
 	for (int i = 0; i < 4; i++) {
@@ -226,7 +212,7 @@ RID EffectsRD::_get_compute_uniform_set_from_image_pair(RID p_texture1, RID p_te
 }
 
 void EffectsRD::copy_to_atlas_fb(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2 &p_uv_rect, RD::DrawListID p_draw_list, bool p_flip_y, bool p_panorama) {
-	zeromem(&copy_to_fb.push_constant, sizeof(CopyToFbPushConstant));
+	memset(&copy_to_fb.push_constant, 0, sizeof(CopyToFbPushConstant));
 
 	copy_to_fb.push_constant.use_section = true;
 	copy_to_fb.push_constant.section[0] = p_uv_rect.position.x;
@@ -247,7 +233,7 @@ void EffectsRD::copy_to_atlas_fb(RID p_source_rd_texture, RID p_dest_framebuffer
 }
 
 void EffectsRD::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y, bool p_force_luminance, bool p_alpha_to_zero, bool p_srgb, RID p_secondary) {
-	zeromem(&copy_to_fb.push_constant, sizeof(CopyToFbPushConstant));
+	memset(&copy_to_fb.push_constant, 0, sizeof(CopyToFbPushConstant));
 
 	if (p_flip_y) {
 		copy_to_fb.push_constant.flip_y = true;
@@ -275,7 +261,7 @@ void EffectsRD::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffer,
 }
 
 void EffectsRD::copy_to_rect(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_rect, bool p_flip_y, bool p_force_luminance, bool p_all_source, bool p_8_bit_dst, bool p_alpha_to_one) {
-	zeromem(&copy.push_constant, sizeof(CopyPushConstant));
+	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 	if (p_flip_y) {
 		copy.push_constant.flags |= COPY_FLAG_FLIP_Y;
 	}
@@ -299,20 +285,17 @@ void EffectsRD::copy_to_rect(RID p_source_rd_texture, RID p_dest_texture, const 
 	copy.push_constant.target[0] = p_rect.position.x;
 	copy.push_constant.target[1] = p_rect.position.y;
 
-	int32_t x_groups = (p_rect.size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_rect.size.height - 1) / 8 + 1;
-
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, copy.pipelines[p_8_bit_dst ? COPY_MODE_SIMPLY_COPY_8BIT : COPY_MODE_SIMPLY_COPY]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_rd_texture), 0);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_texture), 3);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_rect.size.width, p_rect.size.height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
 void EffectsRD::copy_cubemap_to_panorama(RID p_source_cube, RID p_dest_panorama, const Size2i &p_panorama_size, float p_lod, bool p_is_array) {
-	zeromem(&copy.push_constant, sizeof(CopyPushConstant));
+	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 
 	copy.push_constant.section[0] = 0;
 	copy.push_constant.section[1] = 0;
@@ -322,20 +305,17 @@ void EffectsRD::copy_cubemap_to_panorama(RID p_source_cube, RID p_dest_panorama,
 	copy.push_constant.target[1] = 0;
 	copy.push_constant.camera_z_far = p_lod;
 
-	int32_t x_groups = (p_panorama_size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_panorama_size.height - 1) / 8 + 1;
-
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, copy.pipelines[p_is_array ? COPY_MODE_CUBE_ARRAY_TO_PANORAMA : COPY_MODE_CUBE_TO_PANORAMA]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_cube), 0);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_panorama), 3);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_panorama_size.width, p_panorama_size.height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
 void EffectsRD::copy_depth_to_rect_and_linearize(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_rect, bool p_flip_y, float p_z_near, float p_z_far) {
-	zeromem(&copy.push_constant, sizeof(CopyPushConstant));
+	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 	if (p_flip_y) {
 		copy.push_constant.flags |= COPY_FLAG_FLIP_Y;
 	}
@@ -349,20 +329,17 @@ void EffectsRD::copy_depth_to_rect_and_linearize(RID p_source_rd_texture, RID p_
 	copy.push_constant.camera_z_far = p_z_far;
 	copy.push_constant.camera_z_near = p_z_near;
 
-	int32_t x_groups = (p_rect.size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_rect.size.height - 1) / 8 + 1;
-
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, copy.pipelines[COPY_MODE_LINEARIZE_DEPTH]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_rd_texture), 0);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_texture), 3);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_rect.size.width, p_rect.size.height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
 void EffectsRD::copy_depth_to_rect(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_rect, bool p_flip_y) {
-	zeromem(&copy.push_constant, sizeof(CopyPushConstant));
+	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 	if (p_flip_y) {
 		copy.push_constant.flags |= COPY_FLAG_FLIP_Y;
 	}
@@ -374,20 +351,17 @@ void EffectsRD::copy_depth_to_rect(RID p_source_rd_texture, RID p_dest_texture, 
 	copy.push_constant.target[0] = p_rect.position.x;
 	copy.push_constant.target[1] = p_rect.position.y;
 
-	int32_t x_groups = (p_rect.size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_rect.size.height - 1) / 8 + 1;
-
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, copy.pipelines[COPY_MODE_SIMPLY_COPY_DEPTH]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_rd_texture), 0);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_texture), 3);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_rect.size.width, p_rect.size.height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
 void EffectsRD::set_color(RID p_dest_texture, const Color &p_color, const Rect2i &p_region, bool p_8bit_dst) {
-	zeromem(&copy.push_constant, sizeof(CopyPushConstant));
+	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 
 	copy.push_constant.section[0] = 0;
 	copy.push_constant.section[1] = 0;
@@ -400,19 +374,16 @@ void EffectsRD::set_color(RID p_dest_texture, const Color &p_color, const Rect2i
 	copy.push_constant.set_color[2] = p_color.b;
 	copy.push_constant.set_color[3] = p_color.a;
 
-	int32_t x_groups = (p_region.size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_region.size.height - 1) / 8 + 1;
-
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, copy.pipelines[p_8bit_dst ? COPY_MODE_SET_COLOR_8BIT : COPY_MODE_SET_COLOR]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_texture), 3);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_region.size.width, p_region.size.height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
 void EffectsRD::gaussian_blur(RID p_source_rd_texture, RID p_texture, RID p_back_texture, const Rect2i &p_region, bool p_8bit_dst) {
-	zeromem(&copy.push_constant, sizeof(CopyPushConstant));
+	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 
 	uint32_t base_flags = 0;
 	copy.push_constant.section[0] = p_region.position.x;
@@ -420,8 +391,6 @@ void EffectsRD::gaussian_blur(RID p_source_rd_texture, RID p_texture, RID p_back
 	copy.push_constant.section[2] = p_region.size.width;
 	copy.push_constant.section[3] = p_region.size.height;
 
-	int32_t x_groups = (p_region.size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_region.size.height - 1) / 8 + 1;
 	//HORIZONTAL
 	RD::DrawListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, copy.pipelines[p_8bit_dst ? COPY_MODE_GAUSSIAN_COPY_8BIT : COPY_MODE_GAUSSIAN_COPY]);
@@ -431,7 +400,7 @@ void EffectsRD::gaussian_blur(RID p_source_rd_texture, RID p_texture, RID p_back
 	copy.push_constant.flags = base_flags | COPY_FLAG_HORIZONTAL;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
 
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_region.size.width, p_region.size.height, 1);
 
 	RD::get_singleton()->compute_list_add_barrier(compute_list);
 
@@ -442,18 +411,15 @@ void EffectsRD::gaussian_blur(RID p_source_rd_texture, RID p_texture, RID p_back
 	copy.push_constant.flags = base_flags;
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
 
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_region.size.width, p_region.size.height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
 void EffectsRD::gaussian_glow(RID p_source_rd_texture, RID p_back_texture, const Size2i &p_size, float p_strength, bool p_high_quality, bool p_first_pass, float p_luminance_cap, float p_exposure, float p_bloom, float p_hdr_bleed_treshold, float p_hdr_bleed_scale, RID p_auto_exposure, float p_auto_exposure_grey) {
-	zeromem(&copy.push_constant, sizeof(CopyPushConstant));
+	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 
 	CopyMode copy_mode = p_first_pass && p_auto_exposure.is_valid() ? COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE : COPY_MODE_GAUSSIAN_GLOW;
 	uint32_t base_flags = 0;
-
-	int32_t x_groups = (p_size.width + 7) / 8;
-	int32_t y_groups = (p_size.height + 7) / 8;
 
 	copy.push_constant.section[2] = p_size.x;
 	copy.push_constant.section[3] = p_size.y;
@@ -479,15 +445,12 @@ void EffectsRD::gaussian_glow(RID p_source_rd_texture, RID p_back_texture, const
 	copy.push_constant.flags = base_flags | (p_first_pass ? COPY_FLAG_GLOW_FIRST_PASS : 0) | (p_high_quality ? COPY_FLAG_HIGH_QUALITY_GLOW : 0);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
 
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_size.width, p_size.height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
 void EffectsRD::screen_space_reflection(RID p_diffuse, RID p_normal_roughness, RenderingServer::EnvironmentSSRRoughnessQuality p_roughness_quality, RID p_blur_radius, RID p_blur_radius2, RID p_metallic, const Color &p_metallic_mask, RID p_depth, RID p_scale_depth, RID p_scale_normal, RID p_output, RID p_output_blur, const Size2i &p_screen_size, int p_max_steps, float p_fade_in, float p_fade_out, float p_tolerance, const CameraMatrix &p_camera) {
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-
-	int32_t x_groups = (p_screen_size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_screen_size.height - 1) / 8 + 1;
 
 	{ //scale color and depth to half
 		ssr_scale.push_constant.camera_z_far = p_camera.get_z_far();
@@ -506,7 +469,7 @@ void EffectsRD::screen_space_reflection(RID p_diffuse, RID p_normal_roughness, R
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &ssr_scale.push_constant, sizeof(ScreenSpaceReflectionScalePushConstant));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_screen_size.width, p_screen_size.height, 1);
 
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 	}
@@ -540,14 +503,13 @@ void EffectsRD::screen_space_reflection(RID p_diffuse, RID p_normal_roughness, R
 
 		if (p_roughness_quality != RS::ENV_SSR_ROUGNESS_QUALITY_DISABLED) {
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_image_pair(p_output, p_blur_radius), 1);
-			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture_pair(p_metallic, p_normal_roughness), 3);
 		} else {
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_output), 1);
-			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_metallic), 3);
 		}
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_metallic), 3);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_scale_normal), 2);
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_screen_size.width, p_screen_size.height, 1);
 	}
 
 	if (p_roughness_quality != RS::ENV_SSR_ROUGNESS_QUALITY_DISABLED) {
@@ -585,7 +547,7 @@ void EffectsRD::screen_space_reflection(RID p_diffuse, RID p_normal_roughness, R
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &ssr_filter.push_constant, sizeof(ScreenSpaceReflectionFilterPushConstant));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_screen_size.width, p_screen_size.height, 1);
 
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 
@@ -600,7 +562,7 @@ void EffectsRD::screen_space_reflection(RID p_diffuse, RID p_normal_roughness, R
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &ssr_filter.push_constant, sizeof(ScreenSpaceReflectionFilterPushConstant));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_screen_size.width, p_screen_size.height, 1);
 	}
 
 	RD::get_singleton()->compute_list_end();
@@ -608,9 +570,6 @@ void EffectsRD::screen_space_reflection(RID p_diffuse, RID p_normal_roughness, R
 
 void EffectsRD::sub_surface_scattering(RID p_diffuse, RID p_diffuse2, RID p_depth, const CameraMatrix &p_camera, const Size2i &p_screen_size, float p_scale, float p_depth_scale, RenderingServer::SubSurfaceScatteringQuality p_quality) {
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-
-	int32_t x_groups = (p_screen_size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_screen_size.height - 1) / 8 + 1;
 
 	Plane p = p_camera.xform4(Plane(1, 0, -1, 1));
 	p.normal /= p.d;
@@ -635,7 +594,7 @@ void EffectsRD::sub_surface_scattering(RID p_diffuse, RID p_diffuse2, RID p_dept
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &sss.push_constant, sizeof(SubSurfaceScatteringPushConstant));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_screen_size.width, p_screen_size.height, 1);
 
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 
@@ -646,7 +605,7 @@ void EffectsRD::sub_surface_scattering(RID p_diffuse, RID p_diffuse2, RID p_dept
 		sss.push_constant.vertical = true;
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &sss.push_constant, sizeof(SubSurfaceScatteringPushConstant));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_screen_size.width, p_screen_size.height, 1);
 
 		RD::get_singleton()->compute_list_end();
 	}
@@ -683,50 +642,44 @@ void EffectsRD::merge_specular(RID p_dest_framebuffer, RID p_specular, RID p_bas
 }
 
 void EffectsRD::make_mipmap(RID p_source_rd_texture, RID p_dest_texture, const Size2i &p_size) {
-	zeromem(&copy.push_constant, sizeof(CopyPushConstant));
+	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 
 	copy.push_constant.section[0] = 0;
 	copy.push_constant.section[1] = 0;
 	copy.push_constant.section[2] = p_size.width;
 	copy.push_constant.section[3] = p_size.height;
 
-	int32_t x_groups = (p_size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_size.height - 1) / 8 + 1;
-
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, copy.pipelines[COPY_MODE_MIPMAP]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_rd_texture), 0);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_texture), 3);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_size.width, p_size.height, 1);
 	RD::get_singleton()->compute_list_end();
 }
 
-void EffectsRD::copy_cubemap_to_dp(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_rect, float p_z_near, float p_z_far, float p_bias, bool p_dp_flip) {
+void EffectsRD::copy_cubemap_to_dp(RID p_source_rd_texture, RID p_dst_framebuffer, const Rect2 &p_rect, float p_z_near, float p_z_far, bool p_dp_flip) {
 	CopyToDPPushConstant push_constant;
-	push_constant.screen_size[0] = p_rect.size.x;
-	push_constant.screen_size[1] = p_rect.size.y;
-	push_constant.dest_offset[0] = p_rect.position.x;
-	push_constant.dest_offset[1] = p_rect.position.y;
-	push_constant.bias = p_bias;
+	push_constant.screen_rect[0] = p_rect.position.x;
+	push_constant.screen_rect[1] = p_rect.position.y;
+	push_constant.screen_rect[2] = p_rect.size.width;
+	push_constant.screen_rect[3] = p_rect.size.height;
 	push_constant.z_far = p_z_far;
 	push_constant.z_near = p_z_near;
 	push_constant.z_flip = p_dp_flip;
 
-	int32_t x_groups = (p_rect.size.width - 1) / 8 + 1;
-	int32_t y_groups = (p_rect.size.height - 1) / 8 + 1;
+	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer, RD::INITIAL_ACTION_DROP, RD::FINAL_ACTION_DISCARD, RD::INITIAL_ACTION_KEEP, RD::FINAL_ACTION_READ);
+	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, cube_to_dp.pipeline.get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dst_framebuffer)));
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, _get_uniform_set_from_texture(p_source_rd_texture), 0);
+	RD::get_singleton()->draw_list_bind_index_array(draw_list, index_array);
 
-	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, cube_to_dp.pipeline);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_rd_texture), 0);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_texture), 1);
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(CopyToDPPushConstant));
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
-	RD::get_singleton()->compute_list_end();
+	RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(CopyToDPPushConstant));
+	RD::get_singleton()->draw_list_draw(draw_list, true);
+	RD::get_singleton()->draw_list_end(RD::BARRIER_MASK_RASTER | RD::BARRIER_MASK_TRANSFER);
 }
 
 void EffectsRD::tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings) {
-	zeromem(&tonemap.push_constant, sizeof(TonemapPushConstant));
+	memset(&tonemap.push_constant, 0, sizeof(TonemapPushConstant));
 
 	tonemap.push_constant.use_bcs = p_settings.use_bcs;
 	tonemap.push_constant.bcs[0] = p_settings.brightness;
@@ -763,6 +716,11 @@ void EffectsRD::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Tone
 	tonemap.push_constant.use_debanding = p_settings.use_debanding;
 	tonemap.push_constant.pixel_size[0] = 1.0 / p_settings.texture_size.x;
 	tonemap.push_constant.pixel_size[1] = 1.0 / p_settings.texture_size.y;
+
+	if (p_settings.view_count > 1) {
+		// Use MULTIVIEW versions
+		mode += 4;
+	}
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer, RD::INITIAL_ACTION_DROP, RD::FINAL_ACTION_READ, RD::INITIAL_ACTION_DROP, RD::FINAL_ACTION_DISCARD);
 	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, tonemap.pipelines[mode].get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dst_framebuffer)));
@@ -807,10 +765,7 @@ void EffectsRD::luminance_reduction(RID p_source_texture, const Size2i p_source_
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &luminance_reduce.push_constant, sizeof(LuminanceReducePushConstant));
 
-		int32_t x_groups = (luminance_reduce.push_constant.source_size[0] - 1) / 8 + 1;
-		int32_t y_groups = (luminance_reduce.push_constant.source_size[1] - 1) / 8 + 1;
-
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, luminance_reduce.push_constant.source_size[0], luminance_reduce.push_constant.source_size[1], 1);
 
 		luminance_reduce.push_constant.source_size[0] = MAX(luminance_reduce.push_constant.source_size[0] / 8, 1);
 		luminance_reduce.push_constant.source_size[1] = MAX(luminance_reduce.push_constant.source_size[1] / 8, 1);
@@ -851,14 +806,12 @@ void EffectsRD::bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i 
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_base_texture), 0);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_depth_texture), 1);
 
-	int32_t x_groups = (p_base_texture_size.x - 1) / 8 + 1;
-	int32_t y_groups = (p_base_texture_size.y - 1) / 8 + 1;
 	bokeh.push_constant.size[0] = p_base_texture_size.x;
 	bokeh.push_constant.size[1] = p_base_texture_size.y;
 
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &bokeh.push_constant, sizeof(BokehPushConstant));
 
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_base_texture_size.x, p_base_texture_size.y, 1);
 	RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 	if (p_bokeh_shape == RS::DOF_BOKEH_BOX || p_bokeh_shape == RS::DOF_BOKEH_HEXAGON) {
@@ -875,8 +828,6 @@ void EffectsRD::bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i 
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_halfsize_texture1), 0);
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_base_texture), 1);
 
-			x_groups = ((p_base_texture_size.x >> 1) - 1) / 8 + 1;
-			y_groups = ((p_base_texture_size.y >> 1) - 1) / 8 + 1;
 			bokeh.push_constant.size[0] = p_base_texture_size.x >> 1;
 			bokeh.push_constant.size[1] = p_base_texture_size.y >> 1;
 			bokeh.push_constant.half_size = true;
@@ -890,7 +841,7 @@ void EffectsRD::bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i 
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &bokeh.push_constant, sizeof(BokehPushConstant));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, bokeh.push_constant.size[0], bokeh.push_constant.size[1], 1);
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 		//third pass
@@ -906,7 +857,7 @@ void EffectsRD::bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i 
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &bokeh.push_constant, sizeof(BokehPushConstant));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, bokeh.push_constant.size[0], bokeh.push_constant.size[1], 1);
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 		if (p_quality == RS::DOF_BLUR_QUALITY_VERY_LOW || p_quality == RS::DOF_BLUR_QUALITY_LOW) {
@@ -917,8 +868,6 @@ void EffectsRD::bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i 
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_base_texture), 0);
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_halfsize_texture2), 1);
 
-			x_groups = (p_base_texture_size.x - 1) / 8 + 1;
-			y_groups = (p_base_texture_size.y - 1) / 8 + 1;
 			bokeh.push_constant.size[0] = p_base_texture_size.x;
 			bokeh.push_constant.size[1] = p_base_texture_size.y;
 			bokeh.push_constant.half_size = false;
@@ -926,7 +875,7 @@ void EffectsRD::bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i 
 
 			RD::get_singleton()->compute_list_set_push_constant(compute_list, &bokeh.push_constant, sizeof(BokehPushConstant));
 
-			RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+			RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_base_texture_size.x, p_base_texture_size.y, 1);
 		}
 	} else {
 		//circle
@@ -944,15 +893,13 @@ void EffectsRD::bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i 
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_halfsize_texture1), 0);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_base_texture), 1);
 
-		x_groups = ((p_base_texture_size.x >> 1) - 1) / 8 + 1;
-		y_groups = ((p_base_texture_size.y >> 1) - 1) / 8 + 1;
 		bokeh.push_constant.size[0] = p_base_texture_size.x >> 1;
 		bokeh.push_constant.size[1] = p_base_texture_size.y >> 1;
 		bokeh.push_constant.half_size = true;
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &bokeh.push_constant, sizeof(BokehPushConstant));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, bokeh.push_constant.size[0], bokeh.push_constant.size[1], 1);
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 		//circle is just one pass, then upscale
@@ -964,8 +911,6 @@ void EffectsRD::bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i 
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_base_texture), 0);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_halfsize_texture1), 1);
 
-		x_groups = (p_base_texture_size.x - 1) / 8 + 1;
-		y_groups = (p_base_texture_size.y - 1) / 8 + 1;
 		bokeh.push_constant.size[0] = p_base_texture_size.x;
 		bokeh.push_constant.size[1] = p_base_texture_size.y;
 		bokeh.push_constant.half_size = false;
@@ -973,16 +918,16 @@ void EffectsRD::bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i 
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &bokeh.push_constant, sizeof(BokehPushConstant));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_base_texture_size.x, p_base_texture_size.y, 1);
 	}
 
 	RD::get_singleton()->compute_list_end();
 }
 
-void EffectsRD::gather_ssao(RD::ComputeListID p_compute_list, const Vector<RID> p_ao_slices, const SSAOSettings &p_settings, bool p_adaptive_base_pass) {
-	RD::get_singleton()->compute_list_bind_uniform_set(p_compute_list, ssao.gather_uniform_set, 0);
+void EffectsRD::gather_ssao(RD::ComputeListID p_compute_list, const Vector<RID> p_ao_slices, const SSAOSettings &p_settings, bool p_adaptive_base_pass, RID p_gather_uniform_set, RID p_importance_map_uniform_set) {
+	RD::get_singleton()->compute_list_bind_uniform_set(p_compute_list, p_gather_uniform_set, 0);
 	if ((p_settings.quality == RS::ENV_SSAO_QUALITY_ULTRA) && !p_adaptive_base_pass) {
-		RD::get_singleton()->compute_list_bind_uniform_set(p_compute_list, ssao.importance_map_uniform_set, 1);
+		RD::get_singleton()->compute_list_bind_uniform_set(p_compute_list, p_importance_map_uniform_set, 1);
 	}
 
 	for (int i = 0; i < 4; i++) {
@@ -998,20 +943,20 @@ void EffectsRD::gather_ssao(RD::ComputeListID p_compute_list, const Vector<RID> 
 		RD::get_singleton()->compute_list_bind_uniform_set(p_compute_list, _get_uniform_set_from_image(p_ao_slices[i]), 2);
 		RD::get_singleton()->compute_list_set_push_constant(p_compute_list, &ssao.gather_push_constant, sizeof(SSAOGatherPushConstant));
 
-		int x_groups = ((p_settings.full_screen_size.x >> (p_settings.half_size ? 2 : 1)) - 1) / 8 + 1;
-		int y_groups = ((p_settings.full_screen_size.y >> (p_settings.half_size ? 2 : 1)) - 1) / 8 + 1;
+		Size2i size = Size2i(p_settings.full_screen_size.x >> (p_settings.half_size ? 2 : 1), p_settings.full_screen_size.y >> (p_settings.half_size ? 2 : 1));
 
-		RD::get_singleton()->compute_list_dispatch(p_compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(p_compute_list, size.x, size.y, 1);
 	}
 	RD::get_singleton()->compute_list_add_barrier(p_compute_list);
 }
 
-void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_depth_mipmaps_texture, const Vector<RID> &p_depth_mipmaps, RID p_ao, const Vector<RID> p_ao_slices, RID p_ao_pong, const Vector<RID> p_ao_pong_slices, RID p_upscale_buffer, RID p_importance_map, RID p_importance_map_pong, const CameraMatrix &p_projection, const SSAOSettings &p_settings, bool p_invalidate_uniform_sets) {
+void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_depth_mipmaps_texture, const Vector<RID> &p_depth_mipmaps, RID p_ao, const Vector<RID> p_ao_slices, RID p_ao_pong, const Vector<RID> p_ao_pong_slices, RID p_upscale_buffer, RID p_importance_map, RID p_importance_map_pong, const CameraMatrix &p_projection, const SSAOSettings &p_settings, bool p_invalidate_uniform_sets, RID &r_downsample_uniform_set, RID &r_gather_uniform_set, RID &r_importance_map_uniform_set) {
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-
+	RD::get_singleton()->draw_command_begin_label("SSAO");
 	/* FIRST PASS */
 	// Downsample and deinterleave the depth buffer.
 	{
+		RD::get_singleton()->draw_command_begin_label("Downsample Depth");
 		if (p_invalidate_uniform_sets) {
 			Vector<RD::Uniform> uniforms;
 			{
@@ -1035,7 +980,7 @@ void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_dep
 				u.ids.push_back(p_depth_mipmaps[3]);
 				uniforms.push_back(u);
 			}
-			ssao.downsample_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, ssao.downsample_shader.version_get_shader(ssao.downsample_shader_version, 2), 2);
+			r_downsample_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, ssao.downsample_shader.version_get_shader(ssao.downsample_shader_version, 2), 2);
 		}
 
 		float depth_linearize_mul = -p_projection.matrix[3][2];
@@ -1070,20 +1015,21 @@ void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_dep
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_depth_buffer), 0);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_depth_mipmaps[0]), 1);
 		if (p_settings.quality > RS::ENV_SSAO_QUALITY_MEDIUM) {
-			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, ssao.downsample_uniform_set, 2);
+			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, r_downsample_uniform_set, 2);
 		}
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &ssao.downsample_push_constant, sizeof(SSAODownsamplePushConstant));
 
-		int x_groups = (MAX(1, p_settings.full_screen_size.x >> (p_settings.half_size ? 2 : 1)) - 1) / 8 + 1;
-		int y_groups = (MAX(1, p_settings.full_screen_size.y >> (p_settings.half_size ? 2 : 1)) - 1) / 8 + 1;
+		Size2i size(MAX(1, p_settings.full_screen_size.x >> (p_settings.half_size ? 2 : 1)), MAX(1, p_settings.full_screen_size.y >> (p_settings.half_size ? 2 : 1)));
 
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
+		RD::get_singleton()->draw_command_end_label(); // Downsample SSAO
 	}
 
 	/* SECOND PASS */
 	// Sample SSAO
 	{
+		RD::get_singleton()->draw_command_begin_label("Gather Samples");
 		ssao.gather_push_constant.screen_size[0] = p_settings.full_screen_size.x;
 		ssao.gather_push_constant.screen_size[1] = p_settings.full_screen_size.y;
 
@@ -1153,7 +1099,7 @@ void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_dep
 				u.ids.push_back(ssao.gather_constants_buffer);
 				uniforms.push_back(u);
 			}
-			ssao.gather_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, ssao.gather_shader.version_get_shader(ssao.gather_shader_version, 0), 0);
+			r_gather_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, ssao.gather_shader.version_get_shader(ssao.gather_shader_version, 0), 0);
 		}
 
 		if (p_invalidate_uniform_sets) {
@@ -1180,33 +1126,32 @@ void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_dep
 				u.ids.push_back(ssao.importance_map_load_counter);
 				uniforms.push_back(u);
 			}
-			ssao.importance_map_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, ssao.gather_shader.version_get_shader(ssao.gather_shader_version, 2), 1);
+			r_importance_map_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, ssao.gather_shader.version_get_shader(ssao.gather_shader_version, 2), 1);
 		}
 
 		if (p_settings.quality == RS::ENV_SSAO_QUALITY_ULTRA) {
+			RD::get_singleton()->draw_command_begin_label("Generate Importance Map");
 			ssao.importance_map_push_constant.half_screen_pixel_size[0] = 1.0 / p_settings.half_screen_size.x;
 			ssao.importance_map_push_constant.half_screen_pixel_size[1] = 1.0 / p_settings.half_screen_size.y;
 			ssao.importance_map_push_constant.intensity = p_settings.intensity;
 			ssao.importance_map_push_constant.power = p_settings.power;
 			//base pass
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.pipelines[SSAO_GATHER_BASE]);
-			gather_ssao(compute_list, p_ao_pong_slices, p_settings, true);
+			gather_ssao(compute_list, p_ao_pong_slices, p_settings, true, r_gather_uniform_set, RID());
 			//generate importance map
-			int x_groups = (p_settings.quarter_screen_size.x - 1) / 8 + 1;
-			int y_groups = (p_settings.quarter_screen_size.y - 1) / 8 + 1;
 
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.pipelines[SSAO_GENERATE_IMPORTANCE_MAP]);
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_ao_pong), 0);
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_importance_map), 1);
 			RD::get_singleton()->compute_list_set_push_constant(compute_list, &ssao.importance_map_push_constant, sizeof(SSAOImportanceMapPushConstant));
-			RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+			RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_settings.quarter_screen_size.x, p_settings.quarter_screen_size.y, 1);
 			RD::get_singleton()->compute_list_add_barrier(compute_list);
 			//process importance map A
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.pipelines[SSAO_PROCESS_IMPORTANCE_MAPA]);
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_importance_map), 0);
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_importance_map_pong), 1);
 			RD::get_singleton()->compute_list_set_push_constant(compute_list, &ssao.importance_map_push_constant, sizeof(SSAOImportanceMapPushConstant));
-			RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+			RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_settings.quarter_screen_size.x, p_settings.quarter_screen_size.y, 1);
 			RD::get_singleton()->compute_list_add_barrier(compute_list);
 			//process Importance Map B
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.pipelines[SSAO_PROCESS_IMPORTANCE_MAPB]);
@@ -1214,21 +1159,24 @@ void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_dep
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_importance_map), 1);
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, ssao.counter_uniform_set, 2);
 			RD::get_singleton()->compute_list_set_push_constant(compute_list, &ssao.importance_map_push_constant, sizeof(SSAOImportanceMapPushConstant));
-			RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+			RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_settings.quarter_screen_size.x, p_settings.quarter_screen_size.y, 1);
 			RD::get_singleton()->compute_list_add_barrier(compute_list);
 
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.pipelines[SSAO_GATHER_ADAPTIVE]);
+			RD::get_singleton()->draw_command_end_label(); // Importance Map
 		} else {
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.pipelines[SSAO_GATHER]);
 		}
 
-		gather_ssao(compute_list, p_ao_slices, p_settings, false);
+		gather_ssao(compute_list, p_ao_slices, p_settings, false, r_gather_uniform_set, r_importance_map_uniform_set);
+		RD::get_singleton()->draw_command_end_label(); // Gather SSAO
 	}
 
 	//	/* THIRD PASS */
 	//	// Blur
 	//
 	{
+		RD::get_singleton()->draw_command_begin_label("Edge Aware Blur");
 		ssao.blur_push_constant.edge_sharpness = 1.0 - p_settings.sharpness;
 		ssao.blur_push_constant.half_screen_pixel_size[0] = 1.0 / p_settings.half_screen_size.x;
 		ssao.blur_push_constant.half_screen_pixel_size[1] = 1.0 / p_settings.half_screen_size.y;
@@ -1268,22 +1216,22 @@ void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_dep
 				}
 				RD::get_singleton()->compute_list_set_push_constant(compute_list, &ssao.blur_push_constant, sizeof(SSAOBlurPushConstant));
 
-				int x_groups = ((p_settings.full_screen_size.x >> (p_settings.half_size ? 2 : 1)) - 1) / 8 + 1;
-				int y_groups = ((p_settings.full_screen_size.y >> (p_settings.half_size ? 2 : 1)) - 1) / 8 + 1;
-
-				RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+				Size2i size(p_settings.full_screen_size.x >> (p_settings.half_size ? 2 : 1), p_settings.full_screen_size.y >> (p_settings.half_size ? 2 : 1));
+				RD::get_singleton()->compute_list_dispatch_threads(compute_list, size.x, size.y, 1);
 			}
 
 			if (p_settings.quality > RS::ENV_SSAO_QUALITY_VERY_LOW) {
 				RD::get_singleton()->compute_list_add_barrier(compute_list);
 			}
 		}
+		RD::get_singleton()->draw_command_end_label(); // Blur
 	}
 
 	/* FOURTH PASS */
 	// Interleave buffers
 	// back to full size
 	{
+		RD::get_singleton()->draw_command_begin_label("Interleave Buffers");
 		ssao.interleave_push_constant.inv_sharpness = 1.0 - p_settings.sharpness;
 		ssao.interleave_push_constant.pixel_size[0] = 1.0 / p_settings.full_screen_size.x;
 		ssao.interleave_push_constant.pixel_size[1] = 1.0 / p_settings.full_screen_size.y;
@@ -1307,17 +1255,15 @@ void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_dep
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &ssao.interleave_push_constant, sizeof(SSAOInterleavePushConstant));
 
-		int x_groups = (p_settings.full_screen_size.x - 1) / 8 + 1;
-		int y_groups = (p_settings.full_screen_size.y - 1) / 8 + 1;
-
-		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_settings.full_screen_size.x, p_settings.full_screen_size.y, 1);
 		RD::get_singleton()->compute_list_add_barrier(compute_list);
+		RD::get_singleton()->draw_command_end_label(); // Interleave
 	}
-
-	RD::get_singleton()->compute_list_end();
+	RD::get_singleton()->draw_command_end_label(); //SSAO
+	RD::get_singleton()->compute_list_end(RD::BARRIER_MASK_TRANSFER); //wait for upcoming transfer
 
 	int zero[1] = { 0 };
-	RD::get_singleton()->buffer_update(ssao.importance_map_load_counter, 0, sizeof(uint32_t), &zero, false);
+	RD::get_singleton()->buffer_update(ssao.importance_map_load_counter, 0, sizeof(uint32_t), &zero, 0); //no barrier
 }
 
 void EffectsRD::roughness_limit(RID p_source_normal, RID p_roughness, const Size2i &p_size, float p_curve) {
@@ -1330,18 +1276,15 @@ void EffectsRD::roughness_limit(RID p_source_normal, RID p_roughness, const Size
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_normal), 0);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_roughness), 1);
 
-	int x_groups = (p_size.x - 1) / 8 + 1;
-	int y_groups = (p_size.y - 1) / 8 + 1;
-
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &roughness_limiter.push_constant, sizeof(RoughnessLimiterPushConstant)); //not used but set anyway
 
-	RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_size.x, p_size.y, 1);
 
 	RD::get_singleton()->compute_list_end();
 }
 
 void EffectsRD::cubemap_roughness(RID p_source_rd_texture, RID p_dest_framebuffer, uint32_t p_face_id, uint32_t p_sample_count, float p_roughness, float p_size) {
-	zeromem(&roughness.push_constant, sizeof(CubemapRoughnessPushConstant));
+	memset(&roughness.push_constant, 0, sizeof(CubemapRoughnessPushConstant));
 
 	roughness.push_constant.face_id = p_face_id > 9 ? 0 : p_face_id;
 	roughness.push_constant.roughness = p_roughness;
@@ -1412,107 +1355,44 @@ void EffectsRD::cubemap_filter(RID p_source_cubemap, Vector<RID> p_dest_cubemap,
 	RD::get_singleton()->compute_list_end();
 }
 
-void EffectsRD::render_sky(RD::DrawListID p_list, float p_time, RID p_fb, RID p_samplers, RID p_fog, PipelineCacheRD *p_pipeline, RID p_uniform_set, RID p_texture_set, const CameraMatrix &p_camera, const Basis &p_orientation, float p_multiplier, const Vector3 &p_position) {
-	SkyPushConstant sky_push_constant;
-
-	zeromem(&sky_push_constant, sizeof(SkyPushConstant));
-
-	sky_push_constant.proj[0] = p_camera.matrix[2][0];
-	sky_push_constant.proj[1] = p_camera.matrix[0][0];
-	sky_push_constant.proj[2] = p_camera.matrix[2][1];
-	sky_push_constant.proj[3] = p_camera.matrix[1][1];
-	sky_push_constant.position[0] = p_position.x;
-	sky_push_constant.position[1] = p_position.y;
-	sky_push_constant.position[2] = p_position.z;
-	sky_push_constant.multiplier = p_multiplier;
-	sky_push_constant.time = p_time;
-	store_transform_3x3(p_orientation, sky_push_constant.orientation);
-
-	RenderingDevice::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_fb);
-
-	RD::DrawListID draw_list = p_list;
-
-	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, p_pipeline->get_render_pipeline(RD::INVALID_ID, fb_format));
-
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_samplers, 0);
-	if (p_uniform_set.is_valid()) { //material may not have uniform set
-		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_uniform_set, 1);
-	}
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_texture_set, 2);
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_fog, 3);
-
-	RD::get_singleton()->draw_list_bind_index_array(draw_list, index_array);
-
-	RD::get_singleton()->draw_list_set_push_constant(draw_list, &sky_push_constant, sizeof(SkyPushConstant));
-
-	RD::get_singleton()->draw_list_draw(draw_list, true);
-}
-
-void EffectsRD::resolve_gi(RID p_source_depth, RID p_source_normal_roughness, RID p_source_giprobe, RID p_dest_depth, RID p_dest_normal_roughness, RID p_dest_giprobe, Vector2i p_screen_size, int p_samples) {
+void EffectsRD::resolve_gi(RID p_source_depth, RID p_source_normal_roughness, RID p_source_voxel_gi, RID p_dest_depth, RID p_dest_normal_roughness, RID p_dest_voxel_gi, Vector2i p_screen_size, int p_samples, uint32_t p_barrier) {
 	ResolvePushConstant push_constant;
 	push_constant.screen_size[0] = p_screen_size.x;
 	push_constant.screen_size[1] = p_screen_size.y;
 	push_constant.samples = p_samples;
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, resolve.pipelines[p_source_giprobe.is_valid() ? RESOLVE_MODE_GI_GIPROBE : RESOLVE_MODE_GI]);
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, resolve.pipelines[p_source_voxel_gi.is_valid() ? RESOLVE_MODE_GI_VOXEL_GI : RESOLVE_MODE_GI]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture_pair(p_source_depth, p_source_normal_roughness), 0);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_image_pair(p_dest_depth, p_dest_normal_roughness), 1);
-	if (p_source_giprobe.is_valid()) {
-		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_giprobe), 2);
-		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_giprobe), 3);
+	if (p_source_voxel_gi.is_valid()) {
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_voxel_gi), 2);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_voxel_gi), 3);
 	}
 
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ResolvePushConstant));
 
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_screen_size.x, p_screen_size.y, 1, 8, 8, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_screen_size.x, p_screen_size.y, 1);
 
-	RD::get_singleton()->compute_list_end();
+	RD::get_singleton()->compute_list_end(p_barrier);
 }
 
-void EffectsRD::reduce_shadow(RID p_source_shadow, RID p_dest_shadow, const Size2i &p_source_size, const Rect2i &p_source_rect, int p_shrink_limit, RD::ComputeListID compute_list) {
-	uint32_t push_constant[8] = { (uint32_t)p_source_size.x, (uint32_t)p_source_size.y, (uint32_t)p_source_rect.position.x, (uint32_t)p_source_rect.position.y, (uint32_t)p_shrink_limit, 0, 0, 0 };
+void EffectsRD::resolve_depth(RID p_source_depth, RID p_dest_depth, Vector2i p_screen_size, int p_samples, uint32_t p_barrier) {
+	ResolvePushConstant push_constant;
+	push_constant.screen_size[0] = p_screen_size.x;
+	push_constant.screen_size[1] = p_screen_size.y;
+	push_constant.samples = p_samples;
 
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, shadow_reduce.pipelines[SHADOW_REDUCE_REDUCE]);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_image_pair(p_source_shadow, p_dest_shadow), 0);
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(uint32_t) * 8);
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, resolve.pipelines[RESOLVE_MODE_DEPTH]);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_depth), 0);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_dest_depth), 1);
 
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_source_rect.size.width, p_source_rect.size.height, 1, 8, 8, 1);
-}
-void EffectsRD::filter_shadow(RID p_shadow, RID p_backing_shadow, const Size2i &p_source_size, const Rect2i &p_source_rect, RenderingServer::EnvVolumetricFogShadowFilter p_filter, RD::ComputeListID compute_list, bool p_vertical, bool p_horizontal) {
-	uint32_t push_constant[8] = { (uint32_t)p_source_size.x, (uint32_t)p_source_size.y, (uint32_t)p_source_rect.position.x, (uint32_t)p_source_rect.position.y, 0, 0, 0, 0 };
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ResolvePushConstant));
 
-	switch (p_filter) {
-		case RS::ENV_VOLUMETRIC_FOG_SHADOW_FILTER_DISABLED:
-		case RS::ENV_VOLUMETRIC_FOG_SHADOW_FILTER_LOW: {
-			push_constant[5] = 0;
-		} break;
-		case RS::ENV_VOLUMETRIC_FOG_SHADOW_FILTER_MEDIUM: {
-			push_constant[5] = 9;
-		} break;
-		case RS::ENV_VOLUMETRIC_FOG_SHADOW_FILTER_HIGH: {
-			push_constant[5] = 18;
-		} break;
-	}
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_screen_size.x, p_screen_size.y, 1);
 
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, shadow_reduce.pipelines[SHADOW_REDUCE_FILTER]);
-	if (p_vertical) {
-		push_constant[6] = 1;
-		push_constant[7] = 0;
-		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_image_pair(p_shadow, p_backing_shadow), 0);
-		RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(uint32_t) * 8);
-		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_source_rect.size.width, p_source_rect.size.height, 1, 8, 8, 1);
-	}
-	if (p_vertical && p_horizontal) {
-		RD::get_singleton()->compute_list_add_barrier(compute_list);
-	}
-	if (p_horizontal) {
-		push_constant[6] = 0;
-		push_constant[7] = 1;
-		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_image_pair(p_backing_shadow, p_shadow), 0);
-		RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(uint32_t) * 8);
-		RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_source_rect.size.width, p_source_rect.size.height, 1, 8, 8, 1);
-	}
+	RD::get_singleton()->compute_list_end(p_barrier);
 }
 
 void EffectsRD::sort_buffer(RID p_uniform_set, int p_size) {
@@ -1602,7 +1482,7 @@ EffectsRD::EffectsRD() {
 		copy_modes.push_back("\n#define MODE_CUBEMAP_ARRAY_TO_PANORAMA\n");
 
 		copy.shader.initialize(copy_modes);
-		zeromem(&copy.push_constant, sizeof(CopyPushConstant));
+		memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 		copy.shader_version = copy.shader.version_create();
 
 		for (int i = 0; i < COPY_MODE_MAX; i++) {
@@ -1645,12 +1525,29 @@ EffectsRD::EffectsRD() {
 		tonemap_modes.push_back("\n#define USE_1D_LUT\n");
 		tonemap_modes.push_back("\n#define USE_GLOW_FILTER_BICUBIC\n#define USE_1D_LUT\n");
 
+		// multiview versions of our shaders
+		tonemap_modes.push_back("\n#define MULTIVIEW\n");
+		tonemap_modes.push_back("\n#define MULTIVIEW\n#define USE_GLOW_FILTER_BICUBIC\n");
+		tonemap_modes.push_back("\n#define MULTIVIEW\n#define USE_1D_LUT\n");
+		tonemap_modes.push_back("\n#define MULTIVIEW\n#define USE_GLOW_FILTER_BICUBIC\n#define USE_1D_LUT\n");
+
 		tonemap.shader.initialize(tonemap_modes);
+
+		if (!RendererCompositorRD::singleton->is_xr_enabled()) {
+			tonemap.shader.set_variant_enabled(TONEMAP_MODE_NORMAL_MULTIVIEW, false);
+			tonemap.shader.set_variant_enabled(TONEMAP_MODE_BICUBIC_GLOW_FILTER_MULTIVIEW, false);
+			tonemap.shader.set_variant_enabled(TONEMAP_MODE_1D_LUT_MULTIVIEW, false);
+			tonemap.shader.set_variant_enabled(TONEMAP_MODE_BICUBIC_GLOW_FILTER_1D_LUT_MULTIVIEW, false);
+		}
 
 		tonemap.shader_version = tonemap.shader.version_create();
 
 		for (int i = 0; i < TONEMAP_MODE_MAX; i++) {
-			tonemap.pipelines[i].setup(tonemap.shader.version_get_shader(tonemap.shader_version, i), RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(), RD::PipelineDepthStencilState(), RD::PipelineColorBlendState::create_disabled(), 0);
+			if (tonemap.shader.is_variant_enabled(i)) {
+				tonemap.pipelines[i].setup(tonemap.shader.version_get_shader(tonemap.shader_version, i), RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(), RD::PipelineDepthStencilState(), RD::PipelineColorBlendState::create_disabled(), 0);
+			} else {
+				tonemap.pipelines[i].clear();
+			}
 		}
 	}
 
@@ -1678,8 +1575,12 @@ EffectsRD::EffectsRD() {
 		cube_to_dp.shader.initialize(copy_modes);
 
 		cube_to_dp.shader_version = cube_to_dp.shader.version_create();
-
-		cube_to_dp.pipeline = RD::get_singleton()->compute_pipeline_create(cube_to_dp.shader.version_get_shader(cube_to_dp.shader_version, 0));
+		RID shader = cube_to_dp.shader.version_get_shader(cube_to_dp.shader_version, 0);
+		RD::PipelineDepthStencilState dss;
+		dss.enable_depth_test = true;
+		dss.depth_compare_operator = RD::COMPARE_OP_ALWAYS;
+		dss.enable_depth_write = true;
+		cube_to_dp.pipeline.setup(shader, RD::RENDER_PRIMITIVE_TRIANGLES, RD::PipelineRasterizationState(), RD::PipelineMultisampleState(), dss, RD::PipelineColorBlendState(), 0);
 	}
 
 	{
@@ -1776,7 +1677,7 @@ EffectsRD::EffectsRD() {
 				}
 			}
 
-			RD::get_singleton()->buffer_update(ssao.gather_constants_buffer, 0, sizeof(SSAOGatherConstants), &gather_constants, false);
+			RD::get_singleton()->buffer_update(ssao.gather_constants_buffer, 0, sizeof(SSAOGatherConstants), &gather_constants);
 		}
 		{
 			Vector<String> ssao_modes;
@@ -1795,7 +1696,8 @@ EffectsRD::EffectsRD() {
 			}
 			ssao.importance_map_load_counter = RD::get_singleton()->storage_buffer_create(sizeof(uint32_t));
 			int zero[1] = { 0 };
-			RD::get_singleton()->buffer_update(ssao.importance_map_load_counter, 0, sizeof(uint32_t), &zero, false);
+			RD::get_singleton()->buffer_update(ssao.importance_map_load_counter, 0, sizeof(uint32_t), &zero);
+			RD::get_singleton()->set_resource_name(ssao.importance_map_load_counter, "Importance Map Load Counter");
 
 			Vector<RD::Uniform> uniforms;
 			{
@@ -1806,6 +1708,7 @@ EffectsRD::EffectsRD() {
 				uniforms.push_back(u);
 			}
 			ssao.counter_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, ssao.importance_map_shader.version_get_shader(ssao.importance_map_shader_version, 2), 2);
+			RD::get_singleton()->set_resource_name(ssao.counter_uniform_set, "Load Counter Uniform Set");
 		}
 		{
 			Vector<String> ssao_modes;
@@ -1834,7 +1737,7 @@ EffectsRD::EffectsRD() {
 			ssao.interleave_shader_version = ssao.interleave_shader.version_create();
 			for (int i = SSAO_INTERLEAVE; i <= SSAO_INTERLEAVE_HALF; i++) {
 				ssao.pipelines[pipeline] = RD::get_singleton()->compute_pipeline_create(ssao.interleave_shader.version_get_shader(ssao.interleave_shader_version, i - SSAO_INTERLEAVE));
-
+				RD::get_singleton()->set_resource_name(ssao.pipelines[pipeline], "Interleave Pipeline " + itos(i));
 				pipeline++;
 			}
 		}
@@ -1867,7 +1770,7 @@ EffectsRD::EffectsRD() {
 
 	{
 		// Initialize cubemap filter
-		filter.use_high_quality = GLOBAL_GET("rendering/quality/reflections/fast_filter_high_quality");
+		filter.use_high_quality = GLOBAL_GET("rendering/reflections/sky_reflections/fast_filter_high_quality");
 
 		Vector<String> cubemap_filter_modes;
 		cubemap_filter_modes.push_back("\n#define USE_HIGH_QUALITY\n");
@@ -1883,10 +1786,10 @@ EffectsRD::EffectsRD() {
 
 		if (filter.use_high_quality) {
 			filter.coefficient_buffer = RD::get_singleton()->storage_buffer_create(sizeof(high_quality_coeffs));
-			RD::get_singleton()->buffer_update(filter.coefficient_buffer, 0, sizeof(high_quality_coeffs), &high_quality_coeffs[0], false);
+			RD::get_singleton()->buffer_update(filter.coefficient_buffer, 0, sizeof(high_quality_coeffs), &high_quality_coeffs[0]);
 		} else {
 			filter.coefficient_buffer = RD::get_singleton()->storage_buffer_create(sizeof(low_quality_coeffs));
-			RD::get_singleton()->buffer_update(filter.coefficient_buffer, 0, sizeof(low_quality_coeffs), &low_quality_coeffs[0], false);
+			RD::get_singleton()->buffer_update(filter.coefficient_buffer, 0, sizeof(low_quality_coeffs), &low_quality_coeffs[0]);
 		}
 
 		Vector<RD::Uniform> uniforms;
@@ -1993,7 +1896,8 @@ EffectsRD::EffectsRD() {
 	{
 		Vector<String> resolve_modes;
 		resolve_modes.push_back("\n#define MODE_RESOLVE_GI\n");
-		resolve_modes.push_back("\n#define MODE_RESOLVE_GI\n#define GIPROBE_RESOLVE\n");
+		resolve_modes.push_back("\n#define MODE_RESOLVE_GI\n#define VOXEL_GI_RESOLVE\n");
+		resolve_modes.push_back("\n#define MODE_RESOLVE_DEPTH\n");
 
 		resolve.shader.initialize(resolve_modes);
 
@@ -2001,20 +1905,6 @@ EffectsRD::EffectsRD() {
 
 		for (int i = 0; i < RESOLVE_MODE_MAX; i++) {
 			resolve.pipelines[i] = RD::get_singleton()->compute_pipeline_create(resolve.shader.version_get_shader(resolve.shader_version, i));
-		}
-	}
-
-	{
-		Vector<String> shadow_reduce_modes;
-		shadow_reduce_modes.push_back("\n#define MODE_REDUCE\n");
-		shadow_reduce_modes.push_back("\n#define MODE_FILTER\n");
-
-		shadow_reduce.shader.initialize(shadow_reduce_modes);
-
-		shadow_reduce.shader_version = shadow_reduce.shader.version_create();
-
-		for (int i = 0; i < SHADOW_REDUCE_MAX; i++) {
-			shadow_reduce.pipelines[i] = RD::get_singleton()->compute_pipeline_create(shadow_reduce.shader.version_get_shader(shadow_reduce.shader_version, i));
 		}
 	}
 
@@ -2039,12 +1929,14 @@ EffectsRD::EffectsRD() {
 	sampler.max_lod = 0;
 
 	default_sampler = RD::get_singleton()->sampler_create(sampler);
+	RD::get_singleton()->set_resource_name(default_sampler, "Default Linear Sampler");
 
 	sampler.min_filter = RD::SAMPLER_FILTER_LINEAR;
 	sampler.mip_filter = RD::SAMPLER_FILTER_LINEAR;
 	sampler.max_lod = 1e20;
 
 	default_mipmap_sampler = RD::get_singleton()->sampler_create(sampler);
+	RD::get_singleton()->set_resource_name(default_mipmap_sampler, "Default MipMap Sampler");
 
 	{ //create index array for copy shaders
 		Vector<uint8_t> pv;
@@ -2104,5 +1996,4 @@ EffectsRD::~EffectsRD() {
 	ssr_scale.shader.version_free(ssr_scale.shader_version);
 	sss.shader.version_free(sss.shader_version);
 	tonemap.shader.version_free(tonemap.shader_version);
-	shadow_reduce.shader.version_free(shadow_reduce.shader_version);
 }

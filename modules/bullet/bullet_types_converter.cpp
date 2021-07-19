@@ -59,7 +59,7 @@ void INVERT_B_TO_G(btMatrix3x3 const &inVal, Basis &outVal) {
 	INVERT_B_TO_G(inVal[2], outVal[2]);
 }
 
-void B_TO_G(btTransform const &inVal, Transform &outVal) {
+void B_TO_G(btTransform const &inVal, Transform3D &outVal) {
 	B_TO_G(inVal.getBasis(), outVal.basis);
 	B_TO_G(inVal.getOrigin(), outVal.origin);
 }
@@ -89,7 +89,7 @@ void INVERT_G_TO_B(Basis const &inVal, btMatrix3x3 &outVal) {
 	INVERT_G_TO_B(inVal[2], outVal[2]);
 }
 
-void G_TO_B(Transform const &inVal, btTransform &outVal) {
+void G_TO_B(Transform3D const &inVal, btTransform &outVal) {
 	G_TO_B(inVal.basis, outVal.getBasis());
 	G_TO_B(inVal.origin, outVal.getOrigin());
 }
@@ -116,7 +116,7 @@ void UNSCALE_BT_BASIS(btTransform &scaledBasis) {
 			}
 		} else { // Column 1 scale not fuzzy zero.
 			if (column2.fuzzyZero()) {
-				// Create two vectors othogonal to column 1.
+				// Create two vectors orthogonal to column 1.
 				// Ensure that a default basis is created if column 1 = <0, 1, 0>
 				column0 = btVector3(column1[1], -column1[0], 0);
 				column2 = column0.cross(column1);

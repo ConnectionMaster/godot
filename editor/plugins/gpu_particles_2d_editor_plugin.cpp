@@ -81,7 +81,7 @@ void GPUParticles2DEditorPlugin::_menu_callback(int p_idx) {
 			cpu_particles->set_name(particles->get_name());
 			cpu_particles->set_transform(particles->get_transform());
 			cpu_particles->set_visible(particles->is_visible());
-			cpu_particles->set_pause_mode(particles->get_pause_mode());
+			cpu_particles->set_process_mode(particles->get_process_mode());
 			cpu_particles->set_z_index(particles->get_z_index());
 
 			UndoRedo *ur = EditorNode::get_singleton()->get_undo_redo();
@@ -146,7 +146,7 @@ void GPUParticles2DEditorPlugin::_generate_emission_mask() {
 	}
 
 	Ref<Image> img;
-	img.instance();
+	img.instantiate();
 	Error err = ImageLoader::load_image(source_emission_file, img);
 	ERR_FAIL_COND_MSG(err != OK, "Error loading image '" + source_emission_file + "'.");
 
@@ -270,11 +270,11 @@ void GPUParticles2DEditorPlugin::_generate_emission_mask() {
 		}
 	}
 
-	img.instance();
+	img.instantiate();
 	img->create(w, h, false, Image::FORMAT_RGF, texdata);
 
 	Ref<ImageTexture> imgt;
-	imgt.instance();
+	imgt.instantiate();
 	imgt->create_from_image(img);
 
 	pm->set_emission_point_texture(imgt);
@@ -291,10 +291,10 @@ void GPUParticles2DEditorPlugin::_generate_emission_mask() {
 			}
 		}
 
-		img.instance();
+		img.instantiate();
 		img->create(w, h, false, Image::FORMAT_RGBA8, colordata);
 
-		imgt.instance();
+		imgt.instantiate();
 		imgt->create_from_image(img);
 		pm->set_emission_color_texture(imgt);
 	}
@@ -314,10 +314,10 @@ void GPUParticles2DEditorPlugin::_generate_emission_mask() {
 			}
 		}
 
-		img.instance();
+		img.instantiate();
 		img->create(w, h, false, Image::FORMAT_RGF, normdata);
 
-		imgt.instance();
+		imgt.instantiate();
 		imgt->create_from_image(img);
 		pm->set_emission_normal_texture(imgt);
 

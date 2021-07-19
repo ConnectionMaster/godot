@@ -57,26 +57,27 @@ public:
 	};
 
 private:
-	bool force_change;
-	bool current;
-	Viewport *viewport;
+	bool force_change = false;
+	bool current = false;
+	Viewport *viewport = nullptr;
 
-	Projection mode;
+	Projection mode = PROJECTION_PERSPECTIVE;
 
-	float fov;
-	float size;
+	float fov = 0.0;
+	float size = 1.0;
 	Vector2 frustum_offset;
-	float near, far;
-	float v_offset;
-	float h_offset;
-	KeepAspect keep_aspect;
+	float near = 0.0;
+	float far = 0.0;
+	float v_offset = 0.0;
+	float h_offset = 0.0;
+	KeepAspect keep_aspect = KEEP_HEIGHT;
 
 	RID camera;
 	RID scenario_id;
 
 	// String camera_group;
 
-	uint32_t layers;
+	uint32_t layers = 0xfffff;
 
 	Ref<Environment> environment;
 	Ref<CameraEffects> effects;
@@ -87,7 +88,7 @@ private:
 	friend class Viewport;
 	void _update_audio_listener_state();
 
-	DopplerTracking doppler_tracking;
+	DopplerTracking doppler_tracking = DOPPLER_TRACKING_DISABLED;
 	Ref<VelocityTracker3D> velocity_tracker;
 
 protected:
@@ -133,7 +134,7 @@ public:
 	void set_near(float p_near);
 	void set_frustum_offset(Vector2 p_offset);
 
-	virtual Transform get_camera_transform() const;
+	virtual Transform3D get_camera_transform() const;
 
 	virtual Vector3 project_ray_normal(const Point2 &p_pos) const;
 	virtual Vector3 project_ray_origin(const Point2 &p_pos) const;
@@ -152,6 +153,7 @@ public:
 	bool get_cull_mask_bit(int p_layer) const;
 
 	virtual Vector<Plane> get_frustum() const;
+	bool is_position_in_frustum(const Vector3 &p_position) const;
 
 	void set_environment(const Ref<Environment> &p_environment);
 	Ref<Environment> get_environment() const;
@@ -185,19 +187,19 @@ class ClippedCamera3D : public Camera3D {
 	GDCLASS(ClippedCamera3D, Camera3D);
 
 public:
-	enum ProcessMode {
+	enum ClipProcessCallback {
 		CLIP_PROCESS_PHYSICS,
 		CLIP_PROCESS_IDLE,
 	};
 
 private:
-	ProcessMode process_mode;
+	ClipProcessCallback process_callback = CLIP_PROCESS_PHYSICS;
 	RID pyramid_shape;
-	float margin;
-	float clip_offset;
-	uint32_t collision_mask;
-	bool clip_to_areas;
-	bool clip_to_bodies;
+	float margin = 0.0;
+	float clip_offset = 0.0;
+	uint32_t collision_mask = 1;
+	bool clip_to_areas = false;
+	bool clip_to_bodies = true;
 
 	Set<RID> exclude;
 
@@ -206,7 +208,7 @@ private:
 protected:
 	void _notification(int p_what);
 	static void _bind_methods();
-	virtual Transform get_camera_transform() const override;
+	virtual Transform3D get_camera_transform() const override;
 
 public:
 	void set_clip_to_areas(bool p_clip);
@@ -218,8 +220,8 @@ public:
 	void set_margin(float p_margin);
 	float get_margin() const;
 
-	void set_process_mode(ProcessMode p_mode);
-	ProcessMode get_process_mode() const;
+	void set_process_callback(ClipProcessCallback p_mode);
+	ClipProcessCallback get_process_callback() const;
 
 	void set_collision_mask(uint32_t p_mask);
 	uint32_t get_collision_mask() const;
@@ -239,5 +241,5 @@ public:
 	~ClippedCamera3D();
 };
 
-VARIANT_ENUM_CAST(ClippedCamera3D::ProcessMode);
+VARIANT_ENUM_CAST(ClippedCamera3D::ClipProcessCallback);
 #endif

@@ -32,8 +32,8 @@
 
 #include "core/config/project_settings.h"
 #include "core/input/input.h"
-#include "core/os/dir_access.h"
-#include "core/os/file_access.h"
+#include "core/io/dir_access.h"
+#include "core/io/file_access.h"
 #include "core/os/midi_driver.h"
 #include "core/version_generated.gen.h"
 #include "servers/audio_server.h"
@@ -47,37 +47,8 @@ OS *OS::get_singleton() {
 	return singleton;
 }
 
-uint32_t OS::get_ticks_msec() const {
-	return get_ticks_usec() / 1000;
-}
-
-String OS::get_iso_date_time(bool local) const {
-	OS::Date date = get_date(local);
-	OS::Time time = get_time(local);
-
-	String timezone;
-	if (!local) {
-		TimeZoneInfo zone = get_time_zone_info();
-		if (zone.bias >= 0) {
-			timezone = "+";
-		}
-		timezone = timezone + itos(zone.bias / 60).pad_zeros(2) + itos(zone.bias % 60).pad_zeros(2);
-	} else {
-		timezone = "Z";
-	}
-
-	return itos(date.year).pad_zeros(2) +
-		   "-" +
-		   itos(date.month).pad_zeros(2) +
-		   "-" +
-		   itos(date.day).pad_zeros(2) +
-		   "T" +
-		   itos(time.hour).pad_zeros(2) +
-		   ":" +
-		   itos(time.min).pad_zeros(2) +
-		   ":" +
-		   itos(time.sec).pad_zeros(2) +
-		   timezone;
+uint64_t OS::get_ticks_msec() const {
+	return get_ticks_usec() / 1000ULL;
 }
 
 double OS::get_unix_time() const {
@@ -106,10 +77,18 @@ void OS::add_logger(Logger *p_logger) {
 }
 
 void OS::print_error(const char *p_function, const char *p_file, int p_line, const char *p_code, const char *p_rationale, Logger::ErrorType p_type) {
+	if (!_stderr_enabled) {
+		return;
+	}
+
 	_logger->log_error(p_function, p_file, p_line, p_code, p_rationale, p_type);
 }
 
 void OS::print(const char *p_format, ...) {
+	if (!_stdout_enabled) {
+		return;
+	}
+
 	va_list argp;
 	va_start(argp, p_format);
 
@@ -119,6 +98,10 @@ void OS::print(const char *p_format, ...) {
 }
 
 void OS::printerr(const char *p_format, ...) {
+	if (!_stderr_enabled) {
+		return;
+	}
+
 	va_list argp;
 	va_start(argp, p_format);
 
@@ -161,6 +144,22 @@ bool OS::is_stdout_verbose() const {
 
 bool OS::is_stdout_debug_enabled() const {
 	return _debug_stdout;
+}
+
+bool OS::is_stdout_enabled() const {
+	return _stdout_enabled;
+}
+
+bool OS::is_stderr_enabled() const {
+	return _stderr_enabled;
+}
+
+void OS::set_stdout_enabled(bool p_enabled) {
+	_stdout_enabled = p_enabled;
+}
+
+void OS::set_stderr_enabled(bool p_enabled) {
+	_stderr_enabled = p_enabled;
 }
 
 void OS::dump_memory_to_file(const char *p_file) {
@@ -281,6 +280,11 @@ String OS::get_bundle_resource_dir() const {
 String OS::get_user_data_dir() const {
 	return ".";
 }
+
+// Android OS path to app's external data storage
+String OS::get_external_data_dir() const {
+	return get_user_data_dir();
+};
 
 // Absolute path to res://
 String OS::get_resource_dir() const {

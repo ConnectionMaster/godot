@@ -86,13 +86,13 @@ ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 
 		Vector<uint8_t> vertex_data;
 		vertex_data.resize(sizeof(float) * icosphere_vertex_count * 3);
-		copymem(vertex_data.ptrw(), icosphere_vertices, vertex_data.size());
+		memcpy(vertex_data.ptrw(), icosphere_vertices, vertex_data.size());
 
 		sphere_vertex_buffer = RD::get_singleton()->vertex_buffer_create(vertex_data.size(), vertex_data);
 
 		Vector<uint8_t> index_data;
 		index_data.resize(sizeof(uint32_t) * icosphere_triangle_count * 3);
-		copymem(index_data.ptrw(), icosphere_triangle_indices, index_data.size());
+		memcpy(index_data.ptrw(), icosphere_triangle_indices, index_data.size());
 
 		sphere_index_buffer = RD::get_singleton()->index_buffer_create(icosphere_triangle_count * 3, RD::INDEX_BUFFER_FORMAT_UINT32, index_data);
 
@@ -130,13 +130,13 @@ ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 
 		Vector<uint8_t> vertex_data;
 		vertex_data.resize(sizeof(float) * cone_vertex_count * 3);
-		copymem(vertex_data.ptrw(), cone_vertices, vertex_data.size());
+		memcpy(vertex_data.ptrw(), cone_vertices, vertex_data.size());
 
 		cone_vertex_buffer = RD::get_singleton()->vertex_buffer_create(vertex_data.size(), vertex_data);
 
 		Vector<uint8_t> index_data;
 		index_data.resize(sizeof(uint32_t) * cone_triangle_count * 3);
-		copymem(index_data.ptrw(), cone_triangle_indices, index_data.size());
+		memcpy(index_data.ptrw(), cone_triangle_indices, index_data.size());
 
 		cone_index_buffer = RD::get_singleton()->index_buffer_create(cone_triangle_count * 3, RD::INDEX_BUFFER_FORMAT_UINT32, index_data);
 
@@ -184,13 +184,13 @@ ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 
 		Vector<uint8_t> vertex_data;
 		vertex_data.resize(sizeof(float) * box_vertex_count * 3);
-		copymem(vertex_data.ptrw(), box_vertices, vertex_data.size());
+		memcpy(vertex_data.ptrw(), box_vertices, vertex_data.size());
 
 		box_vertex_buffer = RD::get_singleton()->vertex_buffer_create(vertex_data.size(), vertex_data);
 
 		Vector<uint8_t> index_data;
 		index_data.resize(sizeof(uint32_t) * box_triangle_count * 3);
-		copymem(index_data.ptrw(), box_triangle_indices, index_data.size());
+		memcpy(index_data.ptrw(), box_triangle_indices, index_data.size());
 
 		box_index_buffer = RD::get_singleton()->index_buffer_create(box_triangle_count * 3, RD::INDEX_BUFFER_FORMAT_UINT32, index_data);
 
@@ -374,7 +374,7 @@ void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID 
 	}
 }
 
-void ClusterBuilderRD::begin(const Transform &p_view_transform, const CameraMatrix &p_cam_projection, bool p_flip_y) {
+void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const CameraMatrix &p_cam_projection, bool p_flip_y) {
 	view_xform = p_view_transform.affine_inverse();
 	projection = p_cam_projection;
 	z_near = projection.get_z_near();
@@ -400,12 +400,14 @@ void ClusterBuilderRD::begin(const Transform &p_view_transform, const CameraMatr
 void ClusterBuilderRD::bake_cluster() {
 	RENDER_TIMESTAMP(">Bake Cluster");
 
+	RD::get_singleton()->draw_command_begin_label("Bake Light Cluster");
+
 	//clear cluster buffer
-	RD::get_singleton()->buffer_clear(cluster_buffer, 0, cluster_buffer_size, true);
+	RD::get_singleton()->buffer_clear(cluster_buffer, 0, cluster_buffer_size, RD::BARRIER_MASK_RASTER | RD::BARRIER_MASK_COMPUTE);
 
 	if (render_element_count > 0) {
 		//clear render buffer
-		RD::get_singleton()->buffer_clear(cluster_render_buffer, 0, cluster_render_buffer_size, true);
+		RD::get_singleton()->buffer_clear(cluster_render_buffer, 0, cluster_render_buffer_size, RD::BARRIER_MASK_RASTER);
 
 		{ //fill state uniform
 
@@ -420,12 +422,12 @@ void ClusterBuilderRD::bake_cluster() {
 			state.cluster_depth_offset = (render_element_max / 32);
 			state.cluster_data_size = state.cluster_depth_offset + render_element_max;
 
-			RD::get_singleton()->buffer_update(state_uniform, 0, sizeof(StateUniform), &state, true);
+			RD::get_singleton()->buffer_update(state_uniform, 0, sizeof(StateUniform), &state, RD::BARRIER_MASK_RASTER | RD::BARRIER_MASK_COMPUTE);
 		}
 
 		//update instances
 
-		RD::get_singleton()->buffer_update(element_buffer, 0, sizeof(RenderElementData) * render_element_count, render_elements, true);
+		RD::get_singleton()->buffer_update(element_buffer, 0, sizeof(RenderElementData) * render_element_count, render_elements, RD::BARRIER_MASK_RASTER | RD::BARRIER_MASK_COMPUTE);
 
 		RENDER_TIMESTAMP("Render Elements");
 
@@ -469,7 +471,7 @@ void ClusterBuilderRD::bake_cluster() {
 				RD::get_singleton()->draw_list_draw(draw_list, true, instances);
 				i += instances;
 			}
-			RD::get_singleton()->draw_list_end();
+			RD::get_singleton()->draw_list_end(RD::BARRIER_MASK_COMPUTE);
 		}
 		//store elements
 		RENDER_TIMESTAMP("Pack Elements");
@@ -491,12 +493,15 @@ void ClusterBuilderRD::bake_cluster() {
 
 			RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterStore::PushConstant));
 
-			RD::get_singleton()->compute_list_dispatch_threads(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1, 8, 8, 1);
+			RD::get_singleton()->compute_list_dispatch_threads(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1);
 
-			RD::get_singleton()->compute_list_end();
+			RD::get_singleton()->compute_list_end(RD::BARRIER_MASK_RASTER | RD::BARRIER_MASK_COMPUTE);
 		}
+	} else {
+		RD::get_singleton()->barrier(RD::BARRIER_MASK_TRANSFER, RD::BARRIER_MASK_RASTER | RD::BARRIER_MASK_COMPUTE);
 	}
 	RENDER_TIMESTAMP("<Bake Cluster");
+	RD::get_singleton()->draw_command_end_label();
 }
 
 void ClusterBuilderRD::debug(ElementType p_element) {
@@ -519,7 +524,7 @@ void ClusterBuilderRD::debug(ElementType p_element) {
 
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterDebug::PushConstant));
 
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, screen_size.x, screen_size.y, 1, 8, 8, 1);
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, screen_size.x, screen_size.y, 1);
 
 	RD::get_singleton()->compute_list_end();
 }

@@ -15,9 +15,9 @@
 			</return>
 			<argument index="0" name="position" type="Vector3">
 			</argument>
-			<argument index="1" name="in" type="Vector3" default="Vector3( 0, 0, 0 )">
+			<argument index="1" name="in" type="Vector3" default="Vector3(0, 0, 0)">
 			</argument>
-			<argument index="2" name="out" type="Vector3" default="Vector3( 0, 0, 0 )">
+			<argument index="2" name="out" type="Vector3" default="Vector3(0, 0, 0)">
 			</argument>
 			<argument index="3" name="at_position" type="int" default="-1">
 			</argument>
@@ -78,7 +78,7 @@
 			<argument index="0" name="to_point" type="Vector3">
 			</argument>
 			<description>
-				Returns the closest point (in curve's local space) to [code]to_point[/code].
+				Returns the closest baked point (in curve's local space) to [code]to_point[/code].
 				[code]to_point[/code] must be in this curve's local space.
 			</description>
 		</method>

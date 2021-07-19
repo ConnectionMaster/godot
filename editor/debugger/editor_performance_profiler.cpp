@@ -249,7 +249,7 @@ TreeItem *EditorPerformanceProfiler::_create_monitor_item(const StringName &p_mo
 
 void EditorPerformanceProfiler::_marker_input(const Ref<InputEvent> &p_event) {
 	Ref<InputEventMouseButton> mb = p_event;
-	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == BUTTON_LEFT) {
+	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
 		Vector<StringName> active;
 		for (OrderedHashMap<StringName, Monitor>::Element i = monitors.front(); i; i = i.next()) {
 			if (i.value().item->is_checked(0)) {
@@ -380,7 +380,7 @@ EditorPerformanceProfiler::EditorPerformanceProfiler() {
 	info_message->set_text(TTR("Pick one or more items from the list to display the graph."));
 	info_message->set_valign(Label::VALIGN_CENTER);
 	info_message->set_align(Label::ALIGN_CENTER);
-	info_message->set_autowrap(true);
+	info_message->set_autowrap_mode(Label::AUTOWRAP_WORD_SMART);
 	info_message->set_custom_minimum_size(Size2(100 * EDSCALE, 0));
 	info_message->set_anchors_and_offsets_preset(PRESET_WIDE, PRESET_MODE_KEEP_SIZE, 8 * EDSCALE);
 	monitor_draw->add_child(info_message);

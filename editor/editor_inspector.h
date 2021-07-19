@@ -40,7 +40,7 @@ class UndoRedo;
 class EditorPropertyRevert {
 public:
 	static bool may_node_be_in_instance(Node *p_node);
-	static bool get_instanced_node_original_property(Node *p_node, const StringName &p_prop, Variant &value);
+	static bool get_instantiated_node_original_property(Node *p_node, const StringName &p_prop, Variant &value);
 	static bool is_node_property_different(Node *p_node, const Variant &p_current, const Variant &p_orig);
 
 	static bool can_property_revert(Object *p_object, const StringName &p_property);
@@ -83,7 +83,7 @@ private:
 	bool draw_top_bg;
 
 	bool _is_property_different(const Variant &p_current, const Variant &p_orig);
-	bool _get_instanced_node_original_property(const StringName &p_prop, Variant &value);
+	bool _get_instantiated_node_original_property(const StringName &p_prop, Variant &value);
 	void _focusable_focused(int p_index);
 
 	bool selectable;
@@ -97,6 +97,8 @@ private:
 	Control *bottom_editor;
 
 	mutable String tooltip_text;
+
+	Map<StringName, Variant> cache;
 
 protected:
 	void _notification(int p_what);
@@ -152,6 +154,8 @@ public:
 	virtual void collapse_all_folding();
 
 	virtual Variant get_drag_data(const Point2 &p_point) override;
+	virtual void update_cache();
+	virtual bool is_cache_valid() const;
 
 	void set_selectable(bool p_selectable);
 	bool is_selectable() const;
@@ -171,8 +175,8 @@ public:
 	EditorProperty();
 };
 
-class EditorInspectorPlugin : public Reference {
-	GDCLASS(EditorInspectorPlugin, Reference);
+class EditorInspectorPlugin : public RefCounted {
+	GDCLASS(EditorInspectorPlugin, RefCounted);
 
 	friend class EditorInspector;
 	struct AddedEditor {
@@ -194,7 +198,7 @@ public:
 	virtual bool can_handle(Object *p_object);
 	virtual void parse_begin(Object *p_object);
 	virtual void parse_category(Object *p_object, const String &p_parse_category);
-	virtual bool parse_property(Object *p_object, Variant::Type p_type, const String &p_path, PropertyHint p_hint, const String &p_hint_text, int p_usage, bool p_wide = false);
+	virtual bool parse_property(Object *p_object, const Variant::Type p_type, const String &p_path, const PropertyHint p_hint, const String &p_hint_text, const uint32_t p_usage, const bool p_wide = false);
 	virtual void parse_end();
 };
 
@@ -204,7 +208,7 @@ class EditorInspectorCategory : public Control {
 	friend class EditorInspector;
 	Ref<Texture2D> icon;
 	String label;
-	Color bg_color;
+
 	mutable String tooltip_text;
 
 protected:
@@ -267,7 +271,7 @@ class EditorInspector : public ScrollContainer {
 
 	VBoxContainer *main_vbox;
 
-	//map use to cache the instanced editors
+	//map use to cache the instantiated editors
 	Map<StringName, List<EditorProperty *>> editor_property_map;
 	List<EditorInspectorSection *> sections;
 	Set<StringName> pending;
@@ -309,6 +313,8 @@ class EditorInspector : public ScrollContainer {
 	String property_prefix; //used for sectioned inspector
 	String object_class;
 
+	bool restrict_to_basic = false;
+
 	void _edit_set(const String &p_name, const Variant &p_value, bool p_refresh_all, const String &p_changed_field);
 
 	void _property_changed(const String &p_path, const Variant &p_value, const String &p_name = "", bool p_changing = false);
@@ -326,7 +332,7 @@ class EditorInspector : public ScrollContainer {
 
 	void _node_removed(Node *p_node);
 
-	void _changed_callback(Object *p_changed, const char *p_prop) override;
+	void _changed_callback();
 	void _edit_request_change(Object *p_object, const String &p_prop);
 
 	void _filter_changed(const String &p_text);
@@ -339,6 +345,8 @@ class EditorInspector : public ScrollContainer {
 
 	bool _is_property_disabled_by_feature_profile(const StringName &p_property);
 
+	void _update_inspector_bg();
+
 protected:
 	static void _bind_methods();
 	void _notification(int p_what);
@@ -348,7 +356,7 @@ public:
 	static void remove_inspector_plugin(const Ref<EditorInspectorPlugin> &p_plugin);
 	static void cleanup_plugins();
 
-	static EditorProperty *instantiate_property_editor(Object *p_object, Variant::Type p_type, const String &p_path, PropertyHint p_hint, const String &p_hint_text, int p_usage, bool p_wide = false);
+	static EditorProperty *instantiate_property_editor(Object *p_object, const Variant::Type p_type, const String &p_path, const PropertyHint p_hint, const String &p_hint_text, const uint32_t p_usage, const bool p_wide = false);
 
 	void set_undo_redo(UndoRedo *p_undo_redo);
 
@@ -356,9 +364,6 @@ public:
 
 	void update_tree();
 	void update_property(const String &p_prop);
-
-	void refresh();
-
 	void edit(Object *p_object);
 	Object *get_edited_object();
 
@@ -393,8 +398,11 @@ public:
 
 	void set_use_wide_editors(bool p_enable);
 	void set_sub_inspector(bool p_enable);
+	bool is_sub_inspector() const { return sub_inspector; }
 
 	void set_use_deletable_properties(bool p_enabled);
+
+	void set_restrict_to_basic_settings(bool p_restrict);
 
 	EditorInspector();
 };

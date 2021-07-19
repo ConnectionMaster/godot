@@ -39,23 +39,23 @@ class Sprite2D : public Node2D {
 
 	Ref<Texture2D> texture;
 	Color specular_color;
-	float shininess;
+	real_t shininess = 0.0;
 
-	bool centered;
+	bool centered = true;
 	Point2 offset;
 
-	bool hflip;
-	bool vflip;
-	bool region;
+	bool hflip = false;
+	bool vflip = false;
+	bool region_enabled = false;
 	Rect2 region_rect;
-	bool region_filter_clip;
+	bool region_filter_clip_enabled = false;
 
-	int frame;
+	int frame = 0;
 
-	int vframes;
-	int hframes;
+	int vframes = 1;
+	int hframes = 1;
 
-	void _get_rects(Rect2 &r_src_rect, Rect2 &r_dst_rect, bool &r_filter_clip) const;
+	void _get_rects(Rect2 &r_src_rect, Rect2 &r_dst_rect, bool &r_filter_clip_enabled) const;
 
 	void _texture_changed();
 
@@ -97,10 +97,10 @@ public:
 	void set_flip_v(bool p_flip);
 	bool is_flipped_v() const;
 
-	void set_region(bool p_region);
-	bool is_region() const;
+	void set_region_enabled(bool p_enabled);
+	bool is_region_enabled() const;
 
-	void set_region_filter_clip(bool p_enable);
+	void set_region_filter_clip_enabled(bool p_enabled);
 	bool is_region_filter_clip_enabled() const;
 
 	void set_region_rect(const Rect2 &p_region_rect);
@@ -109,8 +109,8 @@ public:
 	void set_frame(int p_frame);
 	int get_frame() const;
 
-	void set_frame_coords(const Vector2 &p_coord);
-	Vector2 get_frame_coords() const;
+	void set_frame_coords(const Vector2i &p_coord);
+	Vector2i get_frame_coords() const;
 
 	void set_vframes(int p_amount);
 	int get_vframes() const;

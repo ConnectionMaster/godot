@@ -32,8 +32,8 @@
 
 #include "core/config/project_settings.h"
 #include "core/debugger/engine_debugger.h"
+#include "core/io/file_access.h"
 #include "core/io/resource_loader.h"
-#include "core/os/file_access.h"
 #include "core/os/os.h"
 #include "scene/resources/audio_stream_sample.h"
 #include "servers/audio/audio_driver_dummy.h"
@@ -188,10 +188,10 @@ int AudioDriverManager::get_driver_count() {
 }
 
 void AudioDriverManager::initialize(int p_driver) {
-	GLOBAL_DEF_RST("audio/enable_audio_input", false);
-	GLOBAL_DEF_RST("audio/mix_rate", DEFAULT_MIX_RATE);
-	GLOBAL_DEF_RST("audio/output_latency", DEFAULT_OUTPUT_LATENCY);
-	GLOBAL_DEF_RST("audio/output_latency.web", 50); // Safer default output_latency for web.
+	GLOBAL_DEF_RST("audio/driver/enable_input", false);
+	GLOBAL_DEF_RST("audio/driver/mix_rate", DEFAULT_MIX_RATE);
+	GLOBAL_DEF_RST("audio/driver/output_latency", DEFAULT_OUTPUT_LATENCY);
+	GLOBAL_DEF_RST("audio/driver/output_latency.web", 50); // Safer default output_latency for web.
 
 	int failed_driver = -1;
 
@@ -246,6 +246,7 @@ void AudioServer::_driver_process(int p_frames, int32_t *p_buffer) {
 		init_channels_and_buffers();
 	}
 
+	ERR_FAIL_COND_MSG(buses.is_empty() && todo, "AudioServer bus count is less than 1.");
 	while (todo) {
 		if (to_mix == 0) {
 			_mix_step();
@@ -401,6 +402,7 @@ void AudioServer::_mix_step() {
 
 		for (int k = 0; k < bus->channels.size(); k++) {
 			if (!bus->channels[k].active) {
+				bus->channels.write[k].peak_volume = AudioFrame(AUDIO_MIN_PEAK_DB, AUDIO_MIN_PEAK_DB);
 				continue;
 			}
 
@@ -434,7 +436,7 @@ void AudioServer::_mix_step() {
 				}
 			}
 
-			bus->channels.write[k].peak_volume = AudioFrame(Math::linear2db(peak.l + 0.0000000001), Math::linear2db(peak.r + 0.0000000001));
+			bus->channels.write[k].peak_volume = AudioFrame(Math::linear2db(peak.l + AUDIO_PEAK_OFFSET), Math::linear2db(peak.r + AUDIO_PEAK_OFFSET));
 
 			if (!bus->channels[k].used) {
 				//see if any audio is contained, because channel was not used
@@ -792,7 +794,7 @@ void AudioServer::_update_bus_effects(int p_bus) {
 	for (int i = 0; i < buses[p_bus]->channels.size(); i++) {
 		buses.write[p_bus]->channels.write[i].effect_instances.resize(buses[p_bus]->effects.size());
 		for (int j = 0; j < buses[p_bus]->effects.size(); j++) {
-			Ref<AudioEffectInstance> fx = buses.write[p_bus]->effects.write[j].effect->instance();
+			Ref<AudioEffectInstance> fx = buses.write[p_bus]->effects.write[j].effect->instantiate();
 			if (Object::cast_to<AudioEffectCompressorInstance>(*fx)) {
 				Object::cast_to<AudioEffectCompressorInstance>(*fx)->set_current_channel(i);
 			}
@@ -811,7 +813,7 @@ void AudioServer::add_bus_effect(int p_bus, const Ref<AudioEffect> &p_effect, in
 
 	Bus::Effect fx;
 	fx.effect = p_effect;
-	//fx.instance=p_effect->instance();
+	//fx.instance=p_effect->instantiate();
 	fx.enabled = true;
 #ifdef DEBUG_ENABLED
 	fx.prof_time = 0;
@@ -938,9 +940,9 @@ void AudioServer::init_channels_and_buffers() {
 }
 
 void AudioServer::init() {
-	channel_disable_threshold_db = GLOBAL_DEF_RST("audio/channel_disable_threshold_db", -60.0);
-	channel_disable_frames = float(GLOBAL_DEF_RST("audio/channel_disable_time", 2.0)) * get_mix_rate();
-	ProjectSettings::get_singleton()->set_custom_property_info("audio/channel_disable_time", PropertyInfo(Variant::FLOAT, "audio/channel_disable_time", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater"));
+	channel_disable_threshold_db = GLOBAL_DEF_RST("audio/buses/channel_disable_threshold_db", -60.0);
+	channel_disable_frames = float(GLOBAL_DEF_RST("audio/buses/channel_disable_time", 2.0)) * get_mix_rate();
+	ProjectSettings::get_singleton()->set_custom_property_info("audio/buses/channel_disable_time", PropertyInfo(Variant::FLOAT, "audio/buses/channel_disable_time", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater"));
 	buffer_size = 1024; //hardcoded for now
 
 	init_channels_and_buffers();
@@ -957,7 +959,7 @@ void AudioServer::init() {
 	set_edited(false); //avoid editors from thinking this was edited
 #endif
 
-	GLOBAL_DEF_RST("audio/video_delay_compensation_ms", 0);
+	GLOBAL_DEF_RST("audio/video/video_delay_compensation_ms", 0);
 }
 
 void AudioServer::update() {
@@ -1034,7 +1036,7 @@ void AudioServer::update() {
 }
 
 void AudioServer::load_default_bus_layout() {
-	String layout_path = ProjectSettings::get_singleton()->get("audio/default_bus_layout");
+	String layout_path = ProjectSettings::get_singleton()->get("audio/buses/default_bus_layout");
 
 	if (ResourceLoader::exists(layout_path)) {
 		Ref<AudioBusLayout> default_layout = ResourceLoader::load(layout_path);
@@ -1162,6 +1164,9 @@ void AudioServer::set_bus_layout(const Ref<AudioBusLayout> &p_bus_layout) {
 				Bus::Effect bfx;
 				bfx.effect = fx;
 				bfx.enabled = p_bus_layout->buses[i].effects[j].enabled;
+#if DEBUG_ENABLED
+				bfx.prof_time = 0;
+#endif
 				bus->effects.push_back(bfx);
 			}
 		}
@@ -1183,7 +1188,7 @@ void AudioServer::set_bus_layout(const Ref<AudioBusLayout> &p_bus_layout) {
 
 Ref<AudioBusLayout> AudioServer::generate_bus_layout() const {
 	Ref<AudioBusLayout> state;
-	state.instance();
+	state.instantiate();
 
 	state->buses.resize(buses.size());
 

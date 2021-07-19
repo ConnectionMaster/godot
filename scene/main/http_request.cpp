@@ -40,47 +40,30 @@ Error HTTPRequest::_request() {
 }
 
 Error HTTPRequest::_parse_url(const String &p_url) {
-	url = p_url;
 	use_ssl = false;
-
 	request_string = "";
 	port = 80;
 	request_sent = false;
 	got_response = false;
 	body_len = -1;
 	body.resize(0);
-	downloaded = 0;
+	downloaded.set(0);
 	redirections = 0;
 
-	String url_lower = url.to_lower();
-	if (url_lower.begins_with("http://")) {
-		url = url.substr(7, url.length() - 7);
-	} else if (url_lower.begins_with("https://")) {
-		url = url.substr(8, url.length() - 8);
+	String scheme;
+	Error err = p_url.parse_url(scheme, url, port, request_string);
+	ERR_FAIL_COND_V_MSG(err != OK, err, "Error parsing URL: " + p_url + ".");
+	if (scheme == "https://") {
 		use_ssl = true;
-		port = 443;
-	} else {
-		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Malformed URL: " + url + ".");
+	} else if (scheme != "http://") {
+		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Invalid URL scheme: " + scheme + ".");
 	}
-
-	ERR_FAIL_COND_V_MSG(url.length() < 1, ERR_INVALID_PARAMETER, "URL too short: " + url + ".");
-
-	int slash_pos = url.find("/");
-
-	if (slash_pos != -1) {
-		request_string = url.substr(slash_pos, url.length());
-		url = url.substr(0, slash_pos);
-	} else {
+	if (port == 0) {
+		port = use_ssl ? 443 : 80;
+	}
+	if (request_string.is_empty()) {
 		request_string = "/";
 	}
-
-	int colon_pos = url.find(":");
-	if (colon_pos != -1) {
-		port = url.substr(colon_pos + 1, url.length()).to_int();
-		url = url.substr(0, colon_pos);
-		ERR_FAIL_COND_V(port < 1 || port > 65535, ERR_INVALID_PARAMETER);
-	}
-
 	return OK;
 }
 
@@ -123,7 +106,7 @@ Error HTTPRequest::request(const String &p_url, const Vector<String> &p_custom_h
 	size_t len = charstr.length();
 	raw_data.resize(len);
 	uint8_t *w = raw_data.ptrw();
-	copymem(w, charstr.ptr(), len);
+	memcpy(w, charstr.ptr(), len);
 
 	return request_raw(p_url, p_custom_headers, p_ssl_validate_domain, p_method, raw_data);
 }
@@ -159,11 +142,11 @@ Error HTTPRequest::request_raw(const String &p_url, const Vector<String> &p_cust
 
 	requesting = true;
 
-	if (use_threads) {
-		thread_done = false;
-		thread_request_quit = false;
+	if (use_threads.is_set()) {
+		thread_done.clear();
+		thread_request_quit.clear();
 		client->set_blocking_mode(true);
-		thread = Thread::create(_thread_func, this);
+		thread.start(_thread_func, this);
 	} else {
 		client->set_blocking_mode(false);
 		err = _request();
@@ -186,7 +169,7 @@ void HTTPRequest::_thread_func(void *p_userdata) {
 	if (err != OK) {
 		hr->call_deferred("_request_done", RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray());
 	} else {
-		while (!hr->thread_request_quit) {
+		while (!hr->thread_request_quit.is_set()) {
 			bool exit = hr->_update_connection();
 			if (exit) {
 				break;
@@ -195,7 +178,7 @@ void HTTPRequest::_thread_func(void *p_userdata) {
 		}
 	}
 
-	hr->thread_done = true;
+	hr->thread_done.set();
 }
 
 void HTTPRequest::cancel_request() {
@@ -205,13 +188,11 @@ void HTTPRequest::cancel_request() {
 		return;
 	}
 
-	if (!use_threads) {
+	if (!use_threads.is_set()) {
 		set_process_internal(false);
 	} else {
-		thread_request_quit = true;
-		Thread::wait_to_finish(thread);
-		memdelete(thread);
-		thread = nullptr;
+		thread_request_quit.set();
+		thread.wait_to_finish();
 	}
 
 	if (file) {
@@ -238,7 +219,7 @@ bool HTTPRequest::_handle_response(bool *ret_value) {
 	List<String> rheaders;
 	client->get_response_headers(&rheaders);
 	response_headers.resize(0);
-	downloaded = 0;
+	downloaded.set(0);
 	for (List<String>::Element *E = rheaders.front(); E; E = E->next()) {
 		response_headers.push_back(E->get());
 	}
@@ -278,7 +259,7 @@ bool HTTPRequest::_handle_response(bool *ret_value) {
 				got_response = false;
 				body_len = -1;
 				body.resize(0);
-				downloaded = 0;
+				downloaded.set(0);
 				redirections = new_redirs;
 				*ret_value = false;
 				return true;
@@ -337,11 +318,12 @@ bool HTTPRequest::_update_connection() {
 
 				call_deferred("_request_done", RESULT_CHUNKED_BODY_SIZE_MISMATCH, response_code, response_headers, PackedByteArray());
 				return true;
-				// Request migh have been done
+				// Request might have been done
 			} else {
 				// Did not request yet, do request
 
-				Error err = client->request_raw(method, request_string, headers, request_data);
+				int size = request_data.size();
+				Error err = client->request(method, request_string, headers, size > 0 ? request_data.ptr() : nullptr, size);
 				if (err != OK) {
 					call_deferred("_request_done", RESULT_CONNECTION_ERROR, 0, PackedStringArray(), PackedByteArray());
 					return true;
@@ -389,34 +371,40 @@ bool HTTPRequest::_update_connection() {
 			}
 
 			client->poll();
-
-			PackedByteArray chunk = client->read_response_body_chunk();
-			downloaded += chunk.size();
-
-			if (file) {
-				const uint8_t *r = chunk.ptr();
-				file->store_buffer(r, chunk.size());
-				if (file->get_error() != OK) {
-					call_deferred("_request_done", RESULT_DOWNLOAD_FILE_WRITE_ERROR, response_code, response_headers, PackedByteArray());
-					return true;
-				}
-			} else {
-				body.append_array(chunk);
+			if (client->get_status() != HTTPClient::STATUS_BODY) {
+				return false;
 			}
 
-			if (body_size_limit >= 0 && downloaded > body_size_limit) {
+			PackedByteArray chunk = client->read_response_body_chunk();
+
+			if (chunk.size()) {
+				downloaded.add(chunk.size());
+				if (file) {
+					const uint8_t *r = chunk.ptr();
+					file->store_buffer(r, chunk.size());
+					if (file->get_error() != OK) {
+						call_deferred("_request_done", RESULT_DOWNLOAD_FILE_WRITE_ERROR, response_code, response_headers, PackedByteArray());
+						return true;
+					}
+				} else {
+					body.append_array(chunk);
+				}
+			}
+
+			if (body_size_limit >= 0 && downloaded.get() > body_size_limit) {
 				call_deferred("_request_done", RESULT_BODY_SIZE_LIMIT_EXCEEDED, response_code, response_headers, PackedByteArray());
 				return true;
 			}
 
 			if (body_len >= 0) {
-				if (downloaded == body_len) {
+				if (downloaded.get() == body_len) {
 					call_deferred("_request_done", RESULT_SUCCESS, response_code, response_headers, body);
 					return true;
 				}
 			} else if (client->get_status() == HTTPClient::STATUS_DISCONNECTED) {
 				// We read till EOF, with no errors. Request is done.
 				call_deferred("_request_done", RESULT_SUCCESS, response_code, response_headers, body);
+				return true;
 			}
 
 			return false;
@@ -452,7 +440,7 @@ void HTTPRequest::_request_done(int p_status, int p_code, const PackedStringArra
 		is_compressed = false;
 	}
 
-	const PackedByteArray *data = NULL;
+	const PackedByteArray *data = nullptr;
 
 	if (accept_gzip && is_compressed && p_data.size() > 0) {
 		// Decompress request body
@@ -480,7 +468,7 @@ void HTTPRequest::_request_done(int p_status, int p_code, const PackedStringArra
 
 void HTTPRequest::_notification(int p_what) {
 	if (p_what == NOTIFICATION_INTERNAL_PROCESS) {
-		if (use_threads) {
+		if (use_threads.is_set()) {
 			return;
 		}
 		bool done = _update_connection();
@@ -499,11 +487,11 @@ void HTTPRequest::_notification(int p_what) {
 
 void HTTPRequest::set_use_threads(bool p_use) {
 	ERR_FAIL_COND(get_http_client_status() != HTTPClient::STATUS_DISCONNECTED);
-	use_threads = p_use;
+	use_threads.set_to(p_use);
 }
 
 bool HTTPRequest::is_using_threads() const {
-	return use_threads;
+	return use_threads.is_set();
 }
 
 void HTTPRequest::set_accept_gzip(bool p_gzip) {
@@ -557,7 +545,7 @@ int HTTPRequest::get_max_redirects() const {
 }
 
 int HTTPRequest::get_downloaded_bytes() const {
-	return downloaded;
+	return downloaded.get();
 }
 
 int HTTPRequest::get_body_size() const {
@@ -640,31 +628,11 @@ void HTTPRequest::_bind_methods() {
 }
 
 HTTPRequest::HTTPRequest() {
-	thread = nullptr;
-
-	port = 80;
-	redirections = 0;
-	max_redirects = 8;
-	body_len = -1;
-	got_response = false;
-	validate_ssl = false;
-	use_ssl = false;
-	accept_gzip = true;
-	response_code = 0;
-	request_sent = false;
-	requesting = false;
-	client.instance();
-	use_threads = false;
-	thread_done = false;
-	downloaded = 0;
-	body_size_limit = -1;
-	file = nullptr;
-
+	client = Ref<HTTPClient>(HTTPClient::create());
 	timer = memnew(Timer);
 	timer->set_one_shot(true);
 	timer->connect("timeout", callable_mp(this, &HTTPRequest::_timeout));
 	add_child(timer);
-	timeout = 0;
 }
 
 HTTPRequest::~HTTPRequest() {

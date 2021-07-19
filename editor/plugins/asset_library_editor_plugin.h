@@ -176,6 +176,7 @@ class EditorAssetLibrary : public PanelContainer {
 
 	void _asset_open();
 	void _asset_file_selected(const String &p_file);
+	void _update_repository_options();
 
 	PanelContainer *library_scroll_bg;
 	ScrollContainer *library_scroll;
@@ -281,7 +282,7 @@ class EditorAssetLibrary : public PanelContainer {
 	void _search(int p_page = 0);
 	void _rerun_search(int p_ignore);
 	void _search_text_changed(const String &p_text = "");
-	void _search_text_entered(const String &p_text = "");
+	void _search_text_submitted(const String &p_text = "");
 	void _api_request(const String &p_request, RequestType p_request_type, const String &p_arguments = "");
 	void _http_request_completed(int p_status, int p_code, const PackedStringArray &headers, const PackedByteArray &p_data);
 	void _http_download_completed(int p_status, int p_code, const PackedStringArray &headers, const PackedByteArray &p_data);

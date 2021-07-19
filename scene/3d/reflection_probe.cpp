@@ -42,7 +42,7 @@ float ReflectionProbe::get_intensity() const {
 void ReflectionProbe::set_ambient_mode(AmbientMode p_mode) {
 	ambient_mode = p_mode;
 	RS::get_singleton()->reflection_probe_set_ambient_mode(probe, RS::ReflectionProbeAmbientMode(p_mode));
-	_change_notify();
+	notify_property_list_changed();
 }
 
 ReflectionProbe::AmbientMode ReflectionProbe::get_ambient_mode() const {
@@ -95,13 +95,12 @@ void ReflectionProbe::set_extents(const Vector3 &p_extents) {
 
 		if (extents[i] - 0.01 < ABS(origin_offset[i])) {
 			origin_offset[i] = SGN(origin_offset[i]) * (extents[i] - 0.01);
-			_change_notify("origin_offset");
 		}
 	}
 
 	RS::get_singleton()->reflection_probe_set_extents(probe, extents);
 	RS::get_singleton()->reflection_probe_set_origin_offset(probe, origin_offset);
-	_change_notify("extents");
+
 	update_gizmo();
 }
 
@@ -120,7 +119,6 @@ void ReflectionProbe::set_origin_offset(const Vector3 &p_extents) {
 	RS::get_singleton()->reflection_probe_set_extents(probe, extents);
 	RS::get_singleton()->reflection_probe_set_origin_offset(probe, origin_offset);
 
-	_change_notify("origin_offset");
 	update_gizmo();
 }
 
@@ -232,9 +230,9 @@ void ReflectionProbe::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_update_mode", "mode"), &ReflectionProbe::set_update_mode);
 	ClassDB::bind_method(D_METHOD("get_update_mode"), &ReflectionProbe::get_update_mode);
 
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "update_mode", PROPERTY_HINT_ENUM, "Once,Always"), "set_update_mode", "get_update_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "update_mode", PROPERTY_HINT_ENUM, "Once (Fast),Always (Slow)"), "set_update_mode", "get_update_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "intensity", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_intensity", "get_intensity");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_distance", PROPERTY_HINT_EXP_RANGE, "0,16384,0.1,or_greater"), "set_max_distance", "get_max_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_distance", PROPERTY_HINT_RANGE, "0,16384,0.1,or_greater,exp"), "set_max_distance", "get_max_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "extents"), "set_extents", "get_extents");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "origin_offset"), "set_origin_offset", "get_origin_offset");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "box_projection"), "set_enable_box_projection", "is_box_projection_enabled");
@@ -244,7 +242,7 @@ void ReflectionProbe::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lod_threshold", PROPERTY_HINT_RANGE, "0,1024,0.1"), "set_lod_threshold", "get_lod_threshold");
 
 	ADD_GROUP("Ambient", "ambient_");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "ambient_mode", PROPERTY_HINT_ENUM, "Disabled,Environment,ConstantColor"), "set_ambient_mode", "get_ambient_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "ambient_mode", PROPERTY_HINT_ENUM, "Disabled,Environment,Constant Color"), "set_ambient_mode", "get_ambient_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "ambient_color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_ambient_color", "get_ambient_color");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ambient_color_energy", PROPERTY_HINT_RANGE, "0,16,0.01"), "set_ambient_color_energy", "get_ambient_color_energy");
 
@@ -257,20 +255,6 @@ void ReflectionProbe::_bind_methods() {
 }
 
 ReflectionProbe::ReflectionProbe() {
-	intensity = 1.0;
-	ambient_mode = AMBIENT_ENVIRONMENT;
-	ambient_color = Color(0, 0, 0);
-	ambient_color_energy = 1.0;
-	max_distance = 0;
-	extents = Vector3(1, 1, 1);
-	origin_offset = Vector3(0, 0, 0);
-	box_projection = false;
-	interior = false;
-	enable_shadows = false;
-	cull_mask = (1 << 20) - 1;
-	update_mode = UPDATE_ONCE;
-	lod_threshold = 1.0;
-
 	probe = RenderingServer::get_singleton()->reflection_probe_create();
 	RS::get_singleton()->instance_set_base(get_instance(), probe);
 	set_disable_scale(true);

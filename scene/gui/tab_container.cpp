@@ -43,11 +43,11 @@ int TabContainer::_get_top_margin() const {
 	}
 
 	// Respect the minimum tab height.
-	Ref<StyleBox> tab_bg = get_theme_stylebox("tab_bg");
-	Ref<StyleBox> tab_fg = get_theme_stylebox("tab_fg");
+	Ref<StyleBox> tab_unselected = get_theme_stylebox("tab_unselected");
+	Ref<StyleBox> tab_selected = get_theme_stylebox("tab_selected");
 	Ref<StyleBox> tab_disabled = get_theme_stylebox("tab_disabled");
 
-	int tab_height = MAX(MAX(tab_bg->get_minimum_size().height, tab_fg->get_minimum_size().height), tab_disabled->get_minimum_size().height);
+	int tab_height = MAX(MAX(tab_unselected->get_minimum_size().height, tab_selected->get_minimum_size().height), tab_disabled->get_minimum_size().height);
 
 	// Font height or higher icon wins.
 	int content_height = 0;
@@ -72,11 +72,13 @@ int TabContainer::_get_top_margin() const {
 }
 
 void TabContainer::_gui_input(const Ref<InputEvent> &p_event) {
+	ERR_FAIL_COND(p_event.is_null());
+
 	Ref<InputEventMouseButton> mb = p_event;
 
 	Popup *popup = get_popup();
 
-	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == BUTTON_LEFT) {
+	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
 		Point2 pos(mb->get_position().x, mb->get_position().y);
 		Size2 size = get_size();
 
@@ -337,8 +339,8 @@ void TabContainer::_notification(int p_what) {
 			}
 
 			Vector<Control *> tabs = _get_tabs();
-			Ref<StyleBox> tab_bg = get_theme_stylebox("tab_bg");
-			Ref<StyleBox> tab_fg = get_theme_stylebox("tab_fg");
+			Ref<StyleBox> tab_unselected = get_theme_stylebox("tab_unselected");
+			Ref<StyleBox> tab_selected = get_theme_stylebox("tab_selected");
 			Ref<StyleBox> tab_disabled = get_theme_stylebox("tab_disabled");
 			Ref<Texture2D> increment = get_theme_icon("increment");
 			Ref<Texture2D> increment_hl = get_theme_icon("increment_highlight");
@@ -346,9 +348,9 @@ void TabContainer::_notification(int p_what) {
 			Ref<Texture2D> decrement_hl = get_theme_icon("decrement_highlight");
 			Ref<Texture2D> menu = get_theme_icon("menu");
 			Ref<Texture2D> menu_hl = get_theme_icon("menu_highlight");
-			Color font_color_fg = get_theme_color("font_color_fg");
-			Color font_color_bg = get_theme_color("font_color_bg");
-			Color font_color_disabled = get_theme_color("font_color_disabled");
+			Color font_selected_color = get_theme_color("font_selected_color");
+			Color font_unselected_color = get_theme_color("font_unselected_color");
+			Color font_disabled_color = get_theme_color("font_disabled_color");
 			int side_margin = get_theme_constant("side_margin");
 
 			// Find out start and width of the header area.
@@ -392,6 +394,7 @@ void TabContainer::_notification(int p_what) {
 			Vector<int> tab_widths;
 			for (int i = first_tab_cache; i < tabs.size(); i++) {
 				if (get_tab_hidden(i)) {
+					tab_widths.push_back(0);
 					continue;
 				}
 				int tab_width = _get_tab_width(i);
@@ -433,17 +436,17 @@ void TabContainer::_notification(int p_what) {
 				int tab_width = tab_widths[i];
 				if (get_tab_disabled(index)) {
 					if (rtl) {
-						_draw_tab(tab_disabled, font_color_disabled, index, size.width - (tabs_ofs_cache + x) - tab_width);
+						_draw_tab(tab_disabled, font_disabled_color, index, size.width - (tabs_ofs_cache + x) - tab_width);
 					} else {
-						_draw_tab(tab_disabled, font_color_disabled, index, tabs_ofs_cache + x);
+						_draw_tab(tab_disabled, font_disabled_color, index, tabs_ofs_cache + x);
 					}
 				} else if (index == current) {
 					x_current = x;
 				} else {
 					if (rtl) {
-						_draw_tab(tab_bg, font_color_bg, index, size.width - (tabs_ofs_cache + x) - tab_width);
+						_draw_tab(tab_unselected, font_unselected_color, index, size.width - (tabs_ofs_cache + x) - tab_width);
 					} else {
-						_draw_tab(tab_bg, font_color_bg, index, tabs_ofs_cache + x);
+						_draw_tab(tab_unselected, font_unselected_color, index, tabs_ofs_cache + x);
 					}
 				}
 
@@ -459,9 +462,9 @@ void TabContainer::_notification(int p_what) {
 			// Draw selected tab in front. only draw selected tab when it's in visible range.
 			if (tabs.size() > 0 && current - first_tab_cache < tab_widths.size() && current >= first_tab_cache) {
 				if (rtl) {
-					_draw_tab(tab_fg, font_color_fg, current, size.width - (tabs_ofs_cache + x_current) - tab_widths[current]);
+					_draw_tab(tab_selected, font_selected_color, current, size.width - (tabs_ofs_cache + x_current) - tab_widths[current]);
 				} else {
-					_draw_tab(tab_fg, font_color_fg, current, tabs_ofs_cache + x_current);
+					_draw_tab(tab_selected, font_selected_color, current, tabs_ofs_cache + x_current);
 				}
 			}
 
@@ -535,6 +538,8 @@ void TabContainer::_draw_tab(Ref<StyleBox> &p_tab_style, Color &p_font_color, in
 	Vector<Control *> tabs = _get_tabs();
 	RID canvas = get_canvas_item();
 	Ref<Font> font = get_theme_font("font");
+	Color font_outline_color = get_theme_color("font_outline_color");
+	int outline_size = get_theme_constant("outline_size");
 	int icon_text_distance = get_theme_constant("icon_separation");
 	int tab_width = _get_tab_width(p_index);
 	int header_height = _get_top_margin();
@@ -565,6 +570,9 @@ void TabContainer::_draw_tab(Ref<StyleBox> &p_tab_style, Color &p_font_color, in
 
 	// Draw the tab text.
 	Point2i text_pos(x_content, y_center - text_buf[p_index]->get_size().y / 2);
+	if (outline_size > 0 && font_outline_color.a > 0) {
+		text_buf[p_index]->draw_outline(canvas, text_pos, outline_size, font_outline_color);
+	}
 	text_buf[p_index]->draw(canvas, text_pos, p_font_color);
 }
 
@@ -578,7 +586,7 @@ void TabContainer::_refresh_texts() {
 		Control *control = Object::cast_to<Control>(tabs[i]);
 		String text = control->has_meta("_tab_name") ? String(tr(String(control->get_meta("_tab_name")))) : String(tr(control->get_name()));
 		Ref<TextLine> name;
-		name.instance();
+		name.instantiate();
 		name->set_direction(rtl ? TextServer::DIRECTION_RTL : TextServer::DIRECTION_LTR);
 		name->add_string(text, font, font_size, Dictionary(), TranslationServer::get_singleton()->get_tool_locale());
 		text_buf.push_back(name);
@@ -640,7 +648,7 @@ int TabContainer::_get_tab_width(int p_index) const {
 	// Get the width of the text displayed on the tab.
 	Ref<Font> font = get_theme_font("font");
 	int font_size = get_theme_font_size("font_size");
-	String text = control->has_meta("_tab_name") ? String(tr(String(control->get_meta("_tab_name")))) : String(control->get_name());
+	String text = control->has_meta("_tab_name") ? String(tr(String(control->get_meta("_tab_name")))) : String(tr(control->get_name()));
 	int width = font->get_string_size(text, font_size).width;
 
 	// Add space for a tab icon.
@@ -655,15 +663,15 @@ int TabContainer::_get_tab_width(int p_index) const {
 	}
 
 	// Respect a minimum size.
-	Ref<StyleBox> tab_bg = get_theme_stylebox("tab_bg");
-	Ref<StyleBox> tab_fg = get_theme_stylebox("tab_fg");
+	Ref<StyleBox> tab_unselected = get_theme_stylebox("tab_unselected");
+	Ref<StyleBox> tab_selected = get_theme_stylebox("tab_selected");
 	Ref<StyleBox> tab_disabled = get_theme_stylebox("tab_disabled");
 	if (get_tab_disabled(p_index)) {
 		width += tab_disabled->get_minimum_size().width;
 	} else if (p_index == current) {
-		width += tab_fg->get_minimum_size().width;
+		width += tab_selected->get_minimum_size().width;
 	} else {
-		width += tab_bg->get_minimum_size().width;
+		width += tab_unselected->get_minimum_size().width;
 	}
 
 	return width;
@@ -746,8 +754,6 @@ void TabContainer::set_current_tab(int p_current) {
 	current = p_current;
 
 	_repaint();
-
-	_change_notify("current_tab");
 
 	if (pending_previous == current) {
 		emit_signal("tab_selected", current);
@@ -967,8 +973,6 @@ void TabContainer::set_tab_align(TabAlign p_align) {
 	ERR_FAIL_INDEX(p_align, 3);
 	align = p_align;
 	update();
-
-	_change_notify("tab_align");
 }
 
 TabContainer::TabAlign TabContainer::get_tab_align() const {
@@ -1022,6 +1026,7 @@ void TabContainer::set_tab_title(int p_tab, const String &p_title) {
 	Control *child = _get_tab(p_tab);
 	ERR_FAIL_COND(!child);
 	child->set_meta("_tab_name", p_title);
+	_refresh_texts();
 	update();
 }
 
@@ -1131,13 +1136,13 @@ Size2 TabContainer::get_minimum_size() const {
 		ms.y = MAX(ms.y, cms.y);
 	}
 
-	Ref<StyleBox> tab_bg = get_theme_stylebox("tab_bg");
-	Ref<StyleBox> tab_fg = get_theme_stylebox("tab_fg");
+	Ref<StyleBox> tab_unselected = get_theme_stylebox("tab_unselected");
+	Ref<StyleBox> tab_selected = get_theme_stylebox("tab_selected");
 	Ref<StyleBox> tab_disabled = get_theme_stylebox("tab_disabled");
 	Ref<Font> font = get_theme_font("font");
 
 	if (tabs_visible) {
-		ms.y += MAX(MAX(tab_bg->get_minimum_size().y, tab_fg->get_minimum_size().y), tab_disabled->get_minimum_size().y);
+		ms.y += MAX(MAX(tab_unselected->get_minimum_size().y, tab_selected->get_minimum_size().y), tab_disabled->get_minimum_size().y);
 		ms.y += _get_top_margin();
 	}
 
@@ -1243,20 +1248,5 @@ void TabContainer::_bind_methods() {
 }
 
 TabContainer::TabContainer() {
-	first_tab_cache = 0;
-	last_tab_cache = 0;
-	buttons_visible_cache = false;
-	menu_hovered = false;
-	highlight_arrow = -1;
-	tabs_ofs_cache = 0;
-	current = 0;
-	previous = 0;
-	align = ALIGN_CENTER;
-	tabs_visible = true;
-	all_tabs_in_front = false;
-	drag_to_rearrange_enabled = false;
-	tabs_rearrange_group = -1;
-	use_hidden_tabs_for_min_size = false;
-
 	connect("mouse_exited", callable_mp(this, &TabContainer::_on_mouse_exited));
 }

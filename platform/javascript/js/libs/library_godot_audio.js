@@ -59,7 +59,7 @@ const GodotAudio = {
 				}
 				onstatechange(state);
 			};
-			ctx.onstatechange(); // Immeditately notify state.
+			ctx.onstatechange(); // Immediately notify state.
 			// Update computed latency
 			GodotAudio.interval = setInterval(function () {
 				let computed_latency = 0;
@@ -238,6 +238,9 @@ const GodotAudioWorklet = {
 
 		close: function () {
 			return new Promise(function (resolve, reject) {
+				if (GodotAudioWorklet.promise === null) {
+					return;
+				}
 				GodotAudioWorklet.promise.then(function () {
 					GodotAudioWorklet.worklet.port.postMessage({
 						'cmd': 'stop',
@@ -247,7 +250,7 @@ const GodotAudioWorklet = {
 					GodotAudioWorklet.worklet = null;
 					GodotAudioWorklet.promise = null;
 					resolve();
-				});
+				}).catch(function (err) { /* aborted? */ });
 			});
 		},
 	},

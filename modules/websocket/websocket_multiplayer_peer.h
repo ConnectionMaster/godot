@@ -32,12 +32,12 @@
 #define WEBSOCKET_MULTIPLAYER_PEER_H
 
 #include "core/error/error_list.h"
-#include "core/io/networked_multiplayer_peer.h"
+#include "core/io/multiplayer_peer.h"
 #include "core/templates/list.h"
 #include "websocket_peer.h"
 
-class WebSocketMultiplayerPeer : public NetworkedMultiplayerPeer {
-	GDCLASS(WebSocketMultiplayerPeer, NetworkedMultiplayerPeer);
+class WebSocketMultiplayerPeer : public MultiplayerPeer {
+	GDCLASS(WebSocketMultiplayerPeer, MultiplayerPeer);
 
 private:
 	Vector<uint8_t> _make_pkt(uint8_t p_type, int32_t p_from, int32_t p_to, const uint8_t *p_data, uint32_t p_data_size);
@@ -55,20 +55,20 @@ protected:
 	};
 
 	struct Packet {
-		int source;
-		int destination;
-		uint8_t *data;
-		uint32_t size;
+		int source = 0;
+		int destination = 0;
+		uint8_t *data = nullptr;
+		uint32_t size = 0;
 	};
 
 	List<Packet> _incoming_packets;
 	Map<int, Ref<WebSocketPeer>> _peer_map;
 	Packet _current_packet;
 
-	bool _is_multiplayer;
-	int _target_peer;
-	int _peer_id;
-	int _refusing;
+	bool _is_multiplayer = false;
+	int _target_peer = 0;
+	int _peer_id = 0;
+	int _refusing = false;
 
 	static void _bind_methods();
 
@@ -78,7 +78,7 @@ protected:
 	int _gen_unique_id() const;
 
 public:
-	/* NetworkedMultiplayerPeer */
+	/* MultiplayerPeer */
 	void set_transfer_mode(TransferMode p_mode) override;
 	TransferMode get_transfer_mode() const override;
 	void set_target_peer(int p_target_peer) override;

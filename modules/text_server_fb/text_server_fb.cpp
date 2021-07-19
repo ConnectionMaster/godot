@@ -46,7 +46,11 @@ _FORCE_INLINE_ bool is_linebreak(char32_t p_char) {
 }
 
 _FORCE_INLINE_ bool is_punct(char32_t p_char) {
-	return (p_char >= 0x0020 && p_char <= 0x002F) || (p_char >= 0x003A && p_char <= 0x0040) || (p_char >= 0x005B && p_char <= 0x0060) || (p_char >= 0x007B && p_char <= 0x007E) || (p_char >= 0x2000 && p_char <= 0x206F) || (p_char >= 0x3000 && p_char <= 0x303F);
+	return (p_char >= 0x0020 && p_char <= 0x002F) || (p_char >= 0x003A && p_char <= 0x0040) || (p_char >= 0x005B && p_char <= 0x005E) || (p_char == 0x0060) || (p_char >= 0x007B && p_char <= 0x007E) || (p_char >= 0x2000 && p_char <= 0x206F) || (p_char >= 0x3000 && p_char <= 0x303F);
+}
+
+_FORCE_INLINE_ bool is_underscore(char32_t p_char) {
+	return (p_char == 0x005F);
 }
 
 /*************************************************************************/
@@ -107,10 +111,12 @@ RID TextServerFallback::create_font_system(const String &p_name, int p_base_size
 RID TextServerFallback::create_font_resource(const String &p_filename, int p_base_size) {
 	_THREAD_SAFE_METHOD_
 	FontDataFallback *fd = nullptr;
-	if (p_filename.get_extension() == "ttf" || p_filename.get_extension() == "otf" || p_filename.get_extension() == "woff") {
-		fd = memnew(DynamicFontDataFallback);
-	} else if (p_filename.get_extension() == "fnt" || p_filename.get_extension() == "font") {
+	if (p_filename.get_extension() == "fnt" || p_filename.get_extension() == "font") {
 		fd = memnew(BitmapFontDataFallback);
+#ifdef MODULE_FREETYPE_ENABLED
+	} else if (p_filename.get_extension() == "ttf" || p_filename.get_extension() == "otf" || p_filename.get_extension() == "woff") {
+		fd = memnew(DynamicFontDataFallback);
+#endif
 	} else {
 		return RID();
 	}
@@ -127,10 +133,12 @@ RID TextServerFallback::create_font_resource(const String &p_filename, int p_bas
 RID TextServerFallback::create_font_memory(const uint8_t *p_data, size_t p_size, const String &p_type, int p_base_size) {
 	_THREAD_SAFE_METHOD_
 	FontDataFallback *fd = nullptr;
-	if (p_type == "ttf" || p_type == "otf" || p_type == "woff") {
-		fd = memnew(DynamicFontDataFallback);
-	} else if (p_type == "fnt" || p_type == "font") {
+	if (p_type == "fnt" || p_type == "font") {
 		fd = memnew(BitmapFontDataFallback);
+#ifdef MODULE_FREETYPE_ENABLED
+	} else if (p_type == "ttf" || p_type == "otf" || p_type == "woff") {
+		fd = memnew(DynamicFontDataFallback);
+#endif
 	} else {
 		return RID();
 	}
@@ -142,6 +150,39 @@ RID TextServerFallback::create_font_memory(const uint8_t *p_data, size_t p_size,
 	}
 
 	return font_owner.make_rid(fd);
+}
+
+RID TextServerFallback::create_font_bitmap(float p_height, float p_ascent, int p_base_size) {
+	_THREAD_SAFE_METHOD_
+	FontDataFallback *fd = memnew(BitmapFontDataFallback);
+	Error err = fd->bitmap_new(p_height, p_ascent, p_base_size);
+	if (err != OK) {
+		memdelete(fd);
+		return RID();
+	}
+
+	return font_owner.make_rid(fd);
+}
+
+void TextServerFallback::font_bitmap_add_texture(RID p_font, const Ref<Texture> &p_texture) {
+	_THREAD_SAFE_METHOD_
+	FontDataFallback *fd = font_owner.getornull(p_font);
+	ERR_FAIL_COND(!fd);
+	fd->bitmap_add_texture(p_texture);
+}
+
+void TextServerFallback::font_bitmap_add_char(RID p_font, char32_t p_char, int p_texture_idx, const Rect2 &p_rect, const Size2 &p_align, float p_advance) {
+	_THREAD_SAFE_METHOD_
+	FontDataFallback *fd = font_owner.getornull(p_font);
+	ERR_FAIL_COND(!fd);
+	fd->bitmap_add_char(p_char, p_texture_idx, p_rect, p_align, p_advance);
+}
+
+void TextServerFallback::font_bitmap_add_kerning_pair(RID p_font, char32_t p_A, char32_t p_B, int p_kerning) {
+	_THREAD_SAFE_METHOD_
+	FontDataFallback *fd = font_owner.getornull(p_font);
+	ERR_FAIL_COND(!fd);
+	fd->bitmap_add_kerning_pair(p_A, p_B, p_kerning);
 }
 
 float TextServerFallback::font_get_height(RID p_font, int p_size) const {
@@ -177,6 +218,34 @@ float TextServerFallback::font_get_underline_thickness(RID p_font, int p_size) c
 	const FontDataFallback *fd = font_owner.getornull(p_font);
 	ERR_FAIL_COND_V(!fd, 0.f);
 	return fd->get_underline_thickness(p_size);
+}
+
+int TextServerFallback::font_get_spacing_space(RID p_font) const {
+	_THREAD_SAFE_METHOD_
+	const FontDataFallback *fd = font_owner.getornull(p_font);
+	ERR_FAIL_COND_V(!fd, 0);
+	return fd->get_spacing_space();
+}
+
+void TextServerFallback::font_set_spacing_space(RID p_font, int p_value) {
+	_THREAD_SAFE_METHOD_
+	FontDataFallback *fd = font_owner.getornull(p_font);
+	ERR_FAIL_COND(!fd);
+	fd->set_spacing_space(p_value);
+}
+
+int TextServerFallback::font_get_spacing_glyph(RID p_font) const {
+	_THREAD_SAFE_METHOD_
+	const FontDataFallback *fd = font_owner.getornull(p_font);
+	ERR_FAIL_COND_V(!fd, 0);
+	return fd->get_spacing_glyph();
+}
+
+void TextServerFallback::font_set_spacing_glyph(RID p_font, int p_value) {
+	_THREAD_SAFE_METHOD_
+	FontDataFallback *fd = font_owner.getornull(p_font);
+	ERR_FAIL_COND(!fd);
+	fd->set_spacing_glyph(p_value);
 }
 
 void TextServerFallback::font_set_antialiased(RID p_font, bool p_antialiased) {
@@ -387,6 +456,13 @@ Vector2 TextServerFallback::font_draw_glyph_outline(RID p_font, RID p_canvas, in
 	return fd->draw_glyph_outline(p_canvas, p_size, p_outline_size, p_pos, p_index, p_color);
 }
 
+bool TextServerFallback::font_get_glyph_contours(RID p_font, int p_size, uint32_t p_index, Vector<Vector3> &r_points, Vector<int32_t> &r_contours, bool &r_orientation) const {
+	_THREAD_SAFE_METHOD_
+	const FontDataFallback *fd = font_owner.getornull(p_font);
+	ERR_FAIL_COND_V(!fd, false);
+	return fd->get_glyph_contours(p_size, p_index, r_points, r_contours, r_orientation);
+}
+
 float TextServerFallback::font_get_oversampling() const {
 	return oversampling;
 }
@@ -562,17 +638,17 @@ bool TextServerFallback::shaped_text_add_string(RID p_shaped, const String &p_te
 	span.start = sd->text.length();
 	span.end = span.start + p_text.length();
 	// Pre-sort fonts, push fonts with the language support first.
-	for (int i = 0; i < p_fonts.size(); i++) {
+	Vector<RID> fonts_no_match;
+	int font_count = p_fonts.size();
+	for (int i = 0; i < font_count; i++) {
 		if (font_is_language_supported(p_fonts[i], p_language)) {
 			span.fonts.push_back(p_fonts[i]);
+		} else {
+			fonts_no_match.push_back(p_fonts[i]);
 		}
 	}
-	// Push the rest valid fonts.
-	for (int i = 0; i < p_fonts.size(); i++) {
-		if (!font_is_language_supported(p_fonts[i], p_language)) {
-			span.fonts.push_back(p_fonts[i]);
-		}
-	}
+	span.fonts.append_array(fonts_no_match);
+
 	ERR_FAIL_COND_V(span.fonts.is_empty(), false);
 	span.font_size = p_size;
 	span.language = p_language;
@@ -1026,7 +1102,7 @@ bool TextServerFallback::shaped_text_update_breaks(RID p_shaped) {
 	}
 
 	if (sd->line_breaks_valid) {
-		return true; // Noting to do.
+		return true; // Nothing to do.
 	}
 
 	int sd_size = sd->glyphs.size();
@@ -1035,6 +1111,9 @@ bool TextServerFallback::shaped_text_update_breaks(RID p_shaped) {
 			char32_t c = sd->text[sd->glyphs[i].start];
 			if (is_punct(c)) {
 				sd->glyphs.write[i].flags |= GRAPHEME_IS_PUNCTUATION;
+			}
+			if (is_underscore(c)) {
+				sd->glyphs.write[i].flags |= GRAPHEME_IS_UNDERSCORE;
 			}
 			if (is_whitespace(c) && !is_linebreak(c)) {
 				sd->glyphs.write[i].flags |= GRAPHEME_IS_SPACE;
@@ -1067,6 +1146,161 @@ bool TextServerFallback::shaped_text_update_justification_ops(RID p_shaped) {
 
 	sd->justification_ops_valid = true; // Not supported by fallback server.
 	return true;
+}
+
+void TextServerFallback::shaped_text_overrun_trim_to_width(RID p_shaped_line, float p_width, uint8_t p_clip_flags) {
+	_THREAD_SAFE_METHOD_
+	ShapedTextData *sd = shaped_owner.getornull(p_shaped_line);
+	ERR_FAIL_COND_MSG(!sd, "ShapedTextDataAdvanced invalid.");
+	if (!sd->valid) {
+		shaped_text_shape(p_shaped_line);
+	}
+
+	bool add_ellipsis = (p_clip_flags & OVERRUN_ADD_ELLIPSIS) == OVERRUN_ADD_ELLIPSIS;
+	bool cut_per_word = (p_clip_flags & OVERRUN_TRIM_WORD_ONLY) == OVERRUN_TRIM_WORD_ONLY;
+	bool enforce_ellipsis = (p_clip_flags & OVERRUN_ENFORCE_ELLIPSIS) == OVERRUN_ENFORCE_ELLIPSIS;
+
+	Glyph *sd_glyphs = sd->glyphs.ptrw();
+
+	if ((p_clip_flags & OVERRUN_TRIM) == OVERRUN_NO_TRIMMING || sd_glyphs == nullptr || p_width <= 0 || !(sd->width > p_width || enforce_ellipsis)) {
+		return;
+	}
+
+	int sd_size = sd->glyphs.size();
+	RID last_gl_font_rid = sd_glyphs[sd_size - 1].font_rid;
+	int last_gl_font_size = sd_glyphs[sd_size - 1].font_size;
+	uint32_t dot_gl_idx = font_get_glyph_index(last_gl_font_rid, '.');
+	Vector2 dot_adv = font_get_glyph_advance(last_gl_font_rid, dot_gl_idx, last_gl_font_size);
+	uint32_t whitespace_gl_idx = font_get_glyph_index(last_gl_font_rid, ' ');
+	Vector2 whitespace_adv = font_get_glyph_advance(last_gl_font_rid, whitespace_gl_idx, last_gl_font_size);
+
+	int ellipsis_advance = 0;
+	if (add_ellipsis) {
+		ellipsis_advance = 3 * dot_adv.x + font_get_spacing_glyph(last_gl_font_rid) + (cut_per_word ? whitespace_adv.x : 0);
+	}
+
+	int ell_min_characters = 6;
+	float width = sd->width;
+
+	bool is_rtl = sd->direction == DIRECTION_RTL || (sd->direction == DIRECTION_AUTO && sd->para_direction == DIRECTION_RTL);
+
+	int trim_pos = (is_rtl) ? sd_size : 0;
+	int ellipsis_pos = (enforce_ellipsis) ? 0 : -1;
+
+	int last_valid_cut = 0;
+	bool found = false;
+
+	int glyphs_from = (is_rtl) ? 0 : sd_size - 1;
+	int glyphs_to = (is_rtl) ? sd_size - 1 : -1;
+	int glyphs_delta = (is_rtl) ? +1 : -1;
+
+	for (int i = glyphs_from; i != glyphs_to; i += glyphs_delta) {
+		if (!is_rtl) {
+			width -= sd_glyphs[i].advance;
+		}
+		if (sd_glyphs[i].count > 0) {
+			bool above_min_char_treshold = ((is_rtl) ? sd_size - 1 - i : i) >= ell_min_characters;
+
+			if (width + (((above_min_char_treshold && add_ellipsis) || enforce_ellipsis) ? ellipsis_advance : 0) <= p_width) {
+				if (cut_per_word && above_min_char_treshold) {
+					if ((sd_glyphs[i].flags & GRAPHEME_IS_BREAK_SOFT) == GRAPHEME_IS_BREAK_SOFT) {
+						last_valid_cut = i;
+						found = true;
+					}
+				} else {
+					last_valid_cut = i;
+					found = true;
+				}
+				if (found) {
+					trim_pos = last_valid_cut;
+
+					if (above_min_char_treshold && width - ellipsis_advance <= p_width) {
+						ellipsis_pos = trim_pos;
+					}
+					break;
+				}
+			}
+		}
+		if (is_rtl) {
+			width -= sd_glyphs[i].advance;
+		}
+	}
+
+	if ((trim_pos >= 0 && sd->width > p_width) || enforce_ellipsis) {
+		int added_glyphs = 0;
+		if (add_ellipsis && (ellipsis_pos > 0 || enforce_ellipsis)) {
+			// Insert an additional space when cutting word bound for aesthetics.
+			if (cut_per_word && (ellipsis_pos > 0)) {
+				TextServer::Glyph gl;
+				gl.start = sd_glyphs[ellipsis_pos].start;
+				gl.end = sd_glyphs[ellipsis_pos].end;
+				gl.count = 1;
+				gl.advance = whitespace_adv.x;
+				gl.index = whitespace_gl_idx;
+				gl.font_rid = last_gl_font_rid;
+				gl.font_size = last_gl_font_size;
+				gl.flags = GRAPHEME_IS_SPACE | GRAPHEME_IS_BREAK_SOFT | GRAPHEME_IS_VIRTUAL | (is_rtl ? GRAPHEME_IS_RTL : 0);
+
+				// Optimized glyph insertion by replacing a glyph whenever possible.
+				int glyph_idx = trim_pos + ((is_rtl) ? -added_glyphs : added_glyphs);
+				if (is_rtl) {
+					if (glyph_idx < 0) {
+						sd->glyphs.insert(0, gl);
+					} else {
+						sd->glyphs.set(glyph_idx, gl);
+					}
+				} else {
+					if (glyph_idx > (sd_size - 1)) {
+						sd->glyphs.append(gl);
+					} else {
+						sd->glyphs.set(glyph_idx, gl);
+					}
+				}
+				added_glyphs++;
+			}
+			// Add ellipsis dots.
+			for (int d = 0; d < 3; d++) {
+				TextServer::Glyph gl;
+				gl.start = sd_glyphs[ellipsis_pos].start;
+				gl.end = sd_glyphs[ellipsis_pos].end;
+				gl.count = 1;
+				gl.advance = dot_adv.x;
+				gl.index = dot_gl_idx;
+				gl.font_rid = last_gl_font_rid;
+				gl.font_size = last_gl_font_size;
+				gl.flags = GRAPHEME_IS_PUNCTUATION | GRAPHEME_IS_VIRTUAL | (is_rtl ? GRAPHEME_IS_RTL : 0);
+
+				// Optimized glyph insertion by replacing a glyph whenever possible.
+				int glyph_idx = trim_pos + ((is_rtl) ? -added_glyphs : added_glyphs);
+				if (is_rtl) {
+					if (glyph_idx < 0) {
+						sd->glyphs.insert(0, gl);
+					} else {
+						sd->glyphs.set(glyph_idx, gl);
+					}
+				} else {
+					if (glyph_idx > (sd_size - 1)) {
+						sd->glyphs.append(gl);
+					} else {
+						sd->glyphs.set(glyph_idx, gl);
+					}
+				}
+				added_glyphs++;
+			}
+		}
+
+		// Cut the remaining glyphs off.
+		if (!is_rtl) {
+			sd->glyphs.resize(trim_pos + added_glyphs);
+		} else {
+			for (int ridx = 0; ridx <= trim_pos - added_glyphs; ridx++) {
+				sd->glyphs.remove(0);
+			}
+		}
+
+		// Update to correct width.
+		sd->width = width + ((ellipsis_pos != -1) ? ellipsis_advance : 0);
+	}
 }
 
 bool TextServerFallback::shaped_text_shape(RID p_shaped) {
@@ -1183,6 +1417,11 @@ bool TextServerFallback::shaped_text_shape(RID p_shaped) {
 							sd->ascent = MAX(sd->ascent, Math::round(fd->get_advance(gl.index, gl.font_size).x * 0.5));
 							sd->descent = MAX(sd->descent, Math::round(fd->get_advance(gl.index, gl.font_size).x * 0.5));
 						}
+					}
+					if (fd->get_spacing_space() && is_whitespace(sd->text[j])) {
+						gl.advance += fd->get_spacing_space();
+					} else {
+						gl.advance += fd->get_spacing_glyph();
 					}
 					sd->upos = MAX(sd->upos, fd->get_underline_position(gl.font_size));
 					sd->uthk = MAX(sd->uthk, fd->get_underline_thickness(gl.font_size));

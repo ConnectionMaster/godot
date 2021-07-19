@@ -77,14 +77,14 @@ int GDScriptFunction::get_max_stack_size() const {
 }
 
 struct _GDFKC {
-	int order;
+	int order = 0;
 	List<int> pos;
 };
 
 struct _GDFKCS {
-	int order;
+	int order = 0;
 	StringName id;
-	int pos;
+	int pos = 0;
 
 	bool operator<(const _GDFKCS &p_r) const {
 		return order < p_r.order;
@@ -150,6 +150,10 @@ GDScriptFunction::GDScriptFunction() {
 }
 
 GDScriptFunction::~GDScriptFunction() {
+	for (int i = 0; i < lambdas.size(); i++) {
+		memdelete(lambdas[i]);
+	}
+
 #ifdef DEBUG_ENABLED
 
 	MutexLock lock(GDScriptLanguage::get_singleton()->lock);
@@ -244,7 +248,7 @@ Variant GDScriptFunctionState::resume(const Variant &p_arg) {
 	bool completed = true;
 
 	// If the return value is a GDScriptFunctionState reference,
-	// then the function did awaited again after resuming.
+	// then the function did await again after resuming.
 	if (ret.is_ref()) {
 		GDScriptFunctionState *gdfs = Object::cast_to<GDScriptFunctionState>(ret);
 		if (gdfs && gdfs->function == function) {
@@ -294,7 +298,6 @@ void GDScriptFunctionState::_bind_methods() {
 GDScriptFunctionState::GDScriptFunctionState() :
 		scripts_list(this),
 		instances_list(this) {
-	function = nullptr;
 }
 
 GDScriptFunctionState::~GDScriptFunctionState() {

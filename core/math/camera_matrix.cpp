@@ -89,7 +89,7 @@ void CameraMatrix::set_perspective(real_t p_fovy_degrees, real_t p_aspect, real_
 	}
 
 	real_t sine, cotangent, deltaZ;
-	real_t radians = p_fovy_degrees / 2.0 * Math_PI / 180.0;
+	real_t radians = Math::deg2rad(p_fovy_degrees / 2.0);
 
 	deltaZ = p_z_far - p_z_near;
 	sine = Math::sin(radians);
@@ -116,7 +116,7 @@ void CameraMatrix::set_perspective(real_t p_fovy_degrees, real_t p_aspect, real_
 
 	real_t left, right, modeltranslation, ymax, xmax, frustumshift;
 
-	ymax = p_z_near * tan(p_fovy_degrees * Math_PI / 360.0f);
+	ymax = p_z_near * tan(Math::deg2rad(p_fovy_degrees / 2.0));
 	xmax = ymax * p_aspect;
 	frustumshift = (p_intraocular_dist / 2.0) * p_z_near / p_convergence_dist;
 
@@ -315,8 +315,8 @@ Vector2 CameraMatrix::get_far_plane_half_extents() const {
 	return Vector2(res.x, res.y);
 }
 
-bool CameraMatrix::get_endpoints(const Transform &p_transform, Vector3 *p_8points) const {
-	Vector<Plane> planes = get_projection_planes(Transform());
+bool CameraMatrix::get_endpoints(const Transform3D &p_transform, Vector3 *p_8points) const {
+	Vector<Plane> planes = get_projection_planes(Transform3D());
 	const Planes intersections[8][3] = {
 		{ PLANE_FAR, PLANE_LEFT, PLANE_TOP },
 		{ PLANE_FAR, PLANE_LEFT, PLANE_BOTTOM },
@@ -338,7 +338,7 @@ bool CameraMatrix::get_endpoints(const Transform &p_transform, Vector3 *p_8point
 	return true;
 }
 
-Vector<Plane> CameraMatrix::get_projection_planes(const Transform &p_transform) const {
+Vector<Plane> CameraMatrix::get_projection_planes(const Transform3D &p_transform) const {
 	/** Fast Plane Extraction from combined modelview/projection matrices.
 	 * References:
 	 * https://web.archive.org/web/20011221205252/http://www.markmorley.com/opengl/frustumculling.html
@@ -707,8 +707,8 @@ void CameraMatrix::scale_translate_to_fit(const AABB &p_aabb) {
 	matrix[3][3] = 1;
 }
 
-CameraMatrix::operator Transform() const {
-	Transform tr;
+CameraMatrix::operator Transform3D() const {
+	Transform3D tr;
 	const real_t *m = &matrix[0][0];
 
 	tr.basis.elements[0][0] = m[0];
@@ -730,8 +730,8 @@ CameraMatrix::operator Transform() const {
 	return tr;
 }
 
-CameraMatrix::CameraMatrix(const Transform &p_transform) {
-	const Transform &tr = p_transform;
+CameraMatrix::CameraMatrix(const Transform3D &p_transform) {
+	const Transform3D &tr = p_transform;
 	real_t *m = &matrix[0][0];
 
 	m[0] = tr.basis.elements[0][0];

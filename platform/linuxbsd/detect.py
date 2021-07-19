@@ -64,15 +64,18 @@ def get_opts():
         BoolVariable("use_llvm", "Use the LLVM compiler", False),
         BoolVariable("use_lld", "Use the LLD linker", False),
         BoolVariable("use_thinlto", "Use ThinLTO", False),
-        BoolVariable("use_static_cpp", "Link libgcc and libstdc++ statically for better portability", False),
+        BoolVariable("use_static_cpp", "Link libgcc and libstdc++ statically for better portability", True),
         BoolVariable("use_coverage", "Test Godot coverage", False),
         BoolVariable("use_ubsan", "Use LLVM/GCC compiler undefined behavior sanitizer (UBSAN)", False),
-        BoolVariable("use_asan", "Use LLVM/GCC compiler address sanitizer (ASAN))", False),
-        BoolVariable("use_lsan", "Use LLVM/GCC compiler leak sanitizer (LSAN))", False),
-        BoolVariable("use_tsan", "Use LLVM/GCC compiler thread sanitizer (TSAN))", False),
+        BoolVariable("use_asan", "Use LLVM/GCC compiler address sanitizer (ASAN)", False),
+        BoolVariable("use_lsan", "Use LLVM/GCC compiler leak sanitizer (LSAN)", False),
+        BoolVariable("use_tsan", "Use LLVM/GCC compiler thread sanitizer (TSAN)", False),
+        BoolVariable("use_msan", "Use LLVM compiler memory sanitizer (MSAN)", False),
         BoolVariable("pulseaudio", "Detect and use PulseAudio", True),
-        BoolVariable("udev", "Use udev for gamepad connection callbacks", False),
-        EnumVariable("debug_symbols", "Add debugging symbols to release/release_debug builds", "yes", ("yes", "no")),
+        BoolVariable("dbus", "Detect and use D-Bus to handle screensaver", True),
+        BoolVariable("udev", "Use udev for gamepad connection callbacks", True),
+        BoolVariable("x11", "Enable X11 display", True),
+        BoolVariable("debug_symbols", "Add debugging symbols to release/release_debug builds", True),
         BoolVariable("separate_debug_symbols", "Create a separate file containing debugging symbols", False),
         BoolVariable("touch", "Enable touch events", True),
         BoolVariable("execinfo", "Use libexecinfo on systems where glibc is not available", False),
@@ -89,20 +92,20 @@ def configure(env):
     if env["target"] == "release":
         if env["optimize"] == "speed":  # optimize for speed (default)
             env.Prepend(CCFLAGS=["-O3"])
-        else:  # optimize for size
+        elif env["optimize"] == "size":  # optimize for size
             env.Prepend(CCFLAGS=["-Os"])
 
-        if env["debug_symbols"] == "yes":
+        if env["debug_symbols"]:
             env.Prepend(CCFLAGS=["-g2"])
 
     elif env["target"] == "release_debug":
         if env["optimize"] == "speed":  # optimize for speed (default)
             env.Prepend(CCFLAGS=["-O2"])
-        else:  # optimize for size
+        elif env["optimize"] == "size":  # optimize for size
             env.Prepend(CCFLAGS=["-Os"])
         env.Prepend(CPPDEFINES=["DEBUG_ENABLED"])
 
-        if env["debug_symbols"] == "yes":
+        if env["debug_symbols"]:
             env.Prepend(CCFLAGS=["-g2"])
 
     elif env["target"] == "debug":
@@ -142,15 +145,27 @@ def configure(env):
         env.Append(CCFLAGS=["-ftest-coverage", "-fprofile-arcs"])
         env.Append(LINKFLAGS=["-ftest-coverage", "-fprofile-arcs"])
 
-    if env["use_ubsan"] or env["use_asan"] or env["use_lsan"] or env["use_tsan"]:
+    if env["use_ubsan"] or env["use_asan"] or env["use_lsan"] or env["use_tsan"] or env["use_msan"]:
         env.extra_suffix += "s"
 
         if env["use_ubsan"]:
-            env.Append(CCFLAGS=["-fsanitize=undefined"])
+            env.Append(
+                CCFLAGS=[
+                    "-fsanitize=undefined,shift,shift-exponent,integer-divide-by-zero,unreachable,vla-bound,null,return,signed-integer-overflow,bounds,float-divide-by-zero,float-cast-overflow,nonnull-attribute,returns-nonnull-attribute,bool,enum,vptr,pointer-overflow,builtin"
+                ]
+            )
             env.Append(LINKFLAGS=["-fsanitize=undefined"])
+            if env["use_llvm"]:
+                env.Append(
+                    CCFLAGS=[
+                        "-fsanitize=nullability-return,nullability-arg,function,nullability-assign,implicit-integer-sign-change"
+                    ]
+                )
+            else:
+                env.Append(CCFLAGS=["-fsanitize=bounds-strict"])
 
         if env["use_asan"]:
-            env.Append(CCFLAGS=["-fsanitize=address"])
+            env.Append(CCFLAGS=["-fsanitize=address,pointer-subtract,pointer-compare"])
             env.Append(LINKFLAGS=["-fsanitize=address"])
 
         if env["use_lsan"]:
@@ -160,6 +175,12 @@ def configure(env):
         if env["use_tsan"]:
             env.Append(CCFLAGS=["-fsanitize=thread"])
             env.Append(LINKFLAGS=["-fsanitize=thread"])
+
+        if env["use_msan"] and env["use_llvm"]:
+            env.Append(CCFLAGS=["-fsanitize=memory"])
+            env.Append(CCFLAGS=["-fsanitize-memory-track-origins"])
+            env.Append(CCFLAGS=["-fsanitize-recover=memory"])
+            env.Append(LINKFLAGS=["-fsanitize=memory"])
 
     if env["use_lto"]:
         if not env["use_llvm"] and env.GetOption("num_jobs") > 1:
@@ -306,13 +327,16 @@ def configure(env):
     if not env["builtin_pcre2"]:
         env.ParseConfig("pkg-config libpcre2-32 --cflags --libs")
 
+    if not env["builtin_embree"]:
+        # No pkgconfig file so far, hardcode expected lib name.
+        env.Append(LIBS=["embree3"])
+
     ## Flags
 
     if os.system("pkg-config --exists alsa") == 0:  # 0 means found
         print("Enabling ALSA")
+        env["alsa"] = True
         env.Append(CPPDEFINES=["ALSA_ENABLED", "ALSAMIDI_ENABLED"])
-        # Don't parse --cflags, we don't need to add /usr/include/alsa to include path
-        env.ParseConfig("pkg-config alsa --libs")
     else:
         print("ALSA libraries not found, disabling driver")
 
@@ -320,37 +344,54 @@ def configure(env):
         if os.system("pkg-config --exists libpulse") == 0:  # 0 means found
             print("Enabling PulseAudio")
             env.Append(CPPDEFINES=["PULSEAUDIO_ENABLED"])
-            env.ParseConfig("pkg-config --cflags --libs libpulse")
+            env.ParseConfig("pkg-config --cflags libpulse")
         else:
             print("PulseAudio development libraries not found, disabling driver")
 
+    if env["dbus"]:
+        if os.system("pkg-config --exists dbus-1") == 0:  # 0 means found
+            print("Enabling D-Bus")
+            env.Append(CPPDEFINES=["DBUS_ENABLED"])
+            env.ParseConfig("pkg-config --cflags --libs dbus-1")
+        else:
+            print("D-Bus development libraries not found, disabling dependent features")
+
     if platform.system() == "Linux":
         env.Append(CPPDEFINES=["JOYDEV_ENABLED"])
-
         if env["udev"]:
             if os.system("pkg-config --exists libudev") == 0:  # 0 means found
                 print("Enabling udev support")
                 env.Append(CPPDEFINES=["UDEV_ENABLED"])
-                env.ParseConfig("pkg-config libudev --cflags --libs")
             else:
                 print("libudev development libraries not found, disabling udev support")
+    else:
+        env["udev"] = False  # Linux specific
 
     # Linkflags below this line should typically stay the last ones
     if not env["builtin_zlib"]:
         env.ParseConfig("pkg-config zlib --cflags --libs")
 
     env.Prepend(CPPPATH=["#platform/linuxbsd"])
-    env.Append(CPPDEFINES=["X11_ENABLED", "UNIX_ENABLED"])
 
-    env.Append(CPPDEFINES=["VULKAN_ENABLED"])
-    if not env["builtin_vulkan"]:
-        env.ParseConfig("pkg-config vulkan --cflags --libs")
-    if not env["builtin_glslang"]:
-        # No pkgconfig file for glslang so far
-        env.Append(LIBS=["glslang", "SPIRV"])
+    if env["x11"]:
+        if not env["vulkan"]:
+            print("Error: X11 support requires vulkan=yes")
+            env.Exit(255)
+        env.Append(CPPDEFINES=["X11_ENABLED"])
 
-    # env.Append(CPPDEFINES=['OPENGL_ENABLED'])
-    env.Append(LIBS=["GL"])
+    env.Append(CPPDEFINES=["UNIX_ENABLED"])
+    env.Append(CPPDEFINES=[("_FILE_OFFSET_BITS", 64)])
+
+    if env["vulkan"]:
+        env.Append(CPPDEFINES=["VULKAN_ENABLED"])
+        if not env["builtin_vulkan"]:
+            env.ParseConfig("pkg-config vulkan --cflags --libs")
+        if not env["builtin_glslang"]:
+            # No pkgconfig file for glslang so far
+            env.Append(LIBS=["glslang", "SPIRV"])
+
+        # env.Append(CPPDEFINES=['OPENGL_ENABLED'])
+        env.Append(LIBS=["GL"])
 
     env.Append(LIBS=["pthread"])
 
@@ -391,3 +432,9 @@ def configure(env):
     # Link those statically for portability
     if env["use_static_cpp"]:
         env.Append(LINKFLAGS=["-static-libgcc", "-static-libstdc++"])
+        if env["use_llvm"]:
+            env["LINKCOM"] = env["LINKCOM"] + " -l:libatomic.a"
+
+    else:
+        if env["use_llvm"]:
+            env.Append(LIBS=["atomic"])

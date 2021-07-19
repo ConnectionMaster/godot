@@ -54,6 +54,7 @@ class EditorNode3DGizmoPlugin;
 class EditorResourcePreview;
 class EditorFileSystem;
 class EditorToolAddons;
+class EditorPaths;
 class FileSystemDock;
 class ScriptEditor;
 
@@ -71,6 +72,7 @@ public:
 
 	Control *get_editor_main_control();
 	void edit_resource(const Ref<Resource> &p_resource);
+	void edit_node(Node *p_node);
 	void open_scene_from_path(const String &scene_path);
 	void reload_scene_from_path(const String &scene_path);
 
@@ -94,12 +96,14 @@ public:
 	EditorSelection *get_selection();
 	//EditorImportExport *get_import_export();
 	Ref<EditorSettings> get_editor_settings();
+	EditorPaths *get_editor_paths();
 	EditorResourcePreview *get_resource_previewer();
 	EditorFileSystem *get_resource_file_system();
 
 	FileSystemDock *get_file_system_dock();
 
 	Control *get_base_control();
+	float get_editor_scale() const;
 
 	void set_plugin_enabled(const String &p_plugin, bool p_enabled);
 	bool is_plugin_enabled(const String &p_plugin) const;
@@ -109,7 +113,7 @@ public:
 	Error save_scene();
 	void save_scene_as(const String &p_scene, bool p_with_preview = true);
 
-	Vector<Ref<Texture2D>> make_mesh_previews(const Vector<Ref<Mesh>> &p_meshes, Vector<Transform> *p_transforms, int p_preview_size);
+	Vector<Ref<Texture2D>> make_mesh_previews(const Vector<Ref<Mesh>> &p_meshes, Vector<Transform3D> *p_transforms, int p_preview_size);
 
 	void set_main_screen_editor(const String &p_name);
 	void set_distraction_free_mode(bool p_enter);
@@ -130,7 +134,11 @@ class EditorPlugin : public Node {
 
 	String last_main_screen_name;
 
+	void _editor_project_settings_changed();
+
 protected:
+	void _notification(int p_what);
+
 	static void _bind_methods();
 	UndoRedo &get_undo_redo() { return *undo_redo; }
 
@@ -218,6 +226,9 @@ public:
 
 	EditorInterface *get_editor_interface();
 	ScriptCreateDialog *get_script_create_dialog();
+
+	void add_undo_redo_inspector_hook_callback(Callable p_callable);
+	void remove_undo_redo_inspector_hook_callback(Callable p_callable);
 
 	int update_overlays() const;
 

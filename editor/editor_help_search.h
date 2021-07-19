@@ -83,7 +83,7 @@ public:
 	EditorHelpSearch();
 };
 
-class EditorHelpSearch::Runner : public Reference {
+class EditorHelpSearch::Runner : public RefCounted {
 	enum Phase {
 		PHASE_MATCH_CLASSES_INIT,
 		PHASE_MATCH_CLASSES,
@@ -124,6 +124,7 @@ class EditorHelpSearch::Runner : public Reference {
 	TreeItem *root_item = nullptr;
 	Map<String, TreeItem *> class_items;
 	TreeItem *matched_item = nullptr;
+	float match_highest_score = 0;
 
 	bool _is_class_disabled_by_feature_profile(const StringName &p_class);
 

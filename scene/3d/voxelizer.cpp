@@ -151,7 +151,7 @@ void Voxelizer::_plot_face(int p_idx, int p_level, int p_x, int p_y, int p_z, co
 				Vector2 uv;
 				Vector3 lnormal;
 				get_uv_and_normal(intersection, p_vtx, p_uv, p_normal, uv, lnormal);
-				if (lnormal == Vector3()) { //just in case normal as nor provided
+				if (lnormal == Vector3()) { //just in case normal is not provided
 					lnormal = normal;
 				}
 
@@ -183,7 +183,7 @@ void Voxelizer::_plot_face(int p_idx, int p_level, int p_x, int p_y, int p_z, co
 			Vector3 lnormal;
 			Vector2 uv;
 			get_uv_and_normal(inters, p_vtx, p_uv, p_normal, uv, normal);
-			if (lnormal == Vector3()) { //just in case normal as nor provided
+			if (lnormal == Vector3()) { //just in case normal is not provided
 				lnormal = normal;
 			}
 
@@ -344,7 +344,7 @@ Voxelizer::MaterialCache Voxelizer::_get_material_cache(Ref<Material> p_material
 
 		Ref<Image> img_albedo;
 		if (albedo_tex.is_valid()) {
-			img_albedo = albedo_tex->get_data();
+			img_albedo = albedo_tex->get_image();
 			mc.albedo = _get_bake_texture(img_albedo, mat->get_albedo(), Color(0, 0, 0)); // albedo texture, color is multiplicative
 		} else {
 			mc.albedo = _get_bake_texture(img_albedo, Color(1, 1, 1), mat->get_albedo()); // no albedo texture, color is additive
@@ -358,7 +358,7 @@ Voxelizer::MaterialCache Voxelizer::_get_material_cache(Ref<Material> p_material
 		Ref<Image> img_emission;
 
 		if (emission_tex.is_valid()) {
-			img_emission = emission_tex->get_data();
+			img_emission = emission_tex->get_image();
 		}
 
 		if (mat->get_emission_operator() == StandardMaterial3D::EMISSION_OP_ADD) {
@@ -378,7 +378,7 @@ Voxelizer::MaterialCache Voxelizer::_get_material_cache(Ref<Material> p_material
 	return mc;
 }
 
-void Voxelizer::plot_mesh(const Transform &p_xform, Ref<Mesh> &p_mesh, const Vector<Ref<Material>> &p_materials, const Ref<Material> &p_override_material) {
+void Voxelizer::plot_mesh(const Transform3D &p_xform, Ref<Mesh> &p_mesh, const Vector<Ref<Material>> &p_materials, const Ref<Material> &p_override_material) {
 	for (int i = 0; i < p_mesh->get_surface_count(); i++) {
 		if (p_mesh->surface_get_primitive_type(i) != Mesh::PRIMITIVE_TRIANGLES) {
 			continue; //only triangles
@@ -647,11 +647,11 @@ void Voxelizer::begin_bake(int p_subdiv, const AABB &p_bounds) {
 		po2_bounds.size[i] = po2_bounds.size[longest_axis];
 	}
 
-	Transform to_bounds;
+	Transform3D to_bounds;
 	to_bounds.basis.scale(Vector3(po2_bounds.size[longest_axis], po2_bounds.size[longest_axis], po2_bounds.size[longest_axis]));
 	to_bounds.origin = po2_bounds.position;
 
-	Transform to_grid;
+	Transform3D to_grid;
 	to_grid.basis.scale(Vector3(axis_cell_size[longest_axis], axis_cell_size[longest_axis], axis_cell_size[longest_axis]));
 
 	to_cell_space = to_grid * to_bounds.affine_inverse();
@@ -668,19 +668,19 @@ void Voxelizer::end_bake() {
 
 //create the data for visual server
 
-int Voxelizer::get_gi_probe_octree_depth() const {
+int Voxelizer::get_voxel_gi_octree_depth() const {
 	return cell_subdiv;
 }
 
-Vector3i Voxelizer::get_giprobe_octree_size() const {
+Vector3i Voxelizer::get_voxel_gi_octree_size() const {
 	return Vector3i(axis_cell_size[0], axis_cell_size[1], axis_cell_size[2]);
 }
 
-int Voxelizer::get_giprobe_cell_count() const {
+int Voxelizer::get_voxel_gi_cell_count() const {
 	return bake_cells.size();
 }
 
-Vector<uint8_t> Voxelizer::get_giprobe_octree_cells() const {
+Vector<uint8_t> Voxelizer::get_voxel_gi_octree_cells() const {
 	Vector<uint8_t> data;
 	data.resize((8 * 4) * bake_cells.size()); //8 uint32t values
 	{
@@ -700,7 +700,7 @@ Vector<uint8_t> Voxelizer::get_giprobe_octree_cells() const {
 	return data;
 }
 
-Vector<uint8_t> Voxelizer::get_giprobe_data_cells() const {
+Vector<uint8_t> Voxelizer::get_voxel_gi_data_cells() const {
 	Vector<uint8_t> data;
 	data.resize((4 * 4) * bake_cells.size()); //8 uint32t values
 	{
@@ -755,7 +755,7 @@ Vector<uint8_t> Voxelizer::get_giprobe_data_cells() const {
 	return data;
 }
 
-Vector<int> Voxelizer::get_giprobe_level_cell_count() const {
+Vector<int> Voxelizer::get_voxel_gi_level_cell_count() const {
 	uint32_t cell_count = bake_cells.size();
 	const Cell *cells = bake_cells.ptr();
 	Vector<int> level_count;
@@ -819,7 +819,7 @@ static void edt(float *f, int stride, int n) {
 #undef square
 
 Vector<uint8_t> Voxelizer::get_sdf_3d_image() const {
-	Vector3i octree_size = get_giprobe_octree_size();
+	Vector3i octree_size = get_voxel_gi_octree_size();
 
 	uint32_t float_count = octree_size.x * octree_size.y * octree_size.z;
 	float *work_memory = memnew_arr(float, float_count);
@@ -891,7 +891,7 @@ Vector<uint8_t> Voxelizer::get_sdf_3d_image() const {
 void Voxelizer::_debug_mesh(int p_idx, int p_level, const AABB &p_aabb, Ref<MultiMesh> &p_multimesh, int &idx) {
 	if (p_level == cell_subdiv - 1) {
 		Vector3 center = p_aabb.position + p_aabb.size * 0.5;
-		Transform xform;
+		Transform3D xform;
 		xform.origin = center;
 		xform.basis.scale(p_aabb.size * 0.5);
 		p_multimesh->set_instance_transform(idx, xform);
@@ -931,14 +931,14 @@ void Voxelizer::_debug_mesh(int p_idx, int p_level, const AABB &p_aabb, Ref<Mult
 Ref<MultiMesh> Voxelizer::create_debug_multimesh() {
 	Ref<MultiMesh> mm;
 
-	mm.instance();
+	mm.instantiate();
 
 	mm->set_transform_format(MultiMesh::TRANSFORM_3D);
 	mm->set_use_colors(true);
 	mm->set_instance_count(leaf_voxel_count);
 
 	Ref<ArrayMesh> mesh;
-	mesh.instance();
+	mesh.instantiate();
 
 	{
 		Array arr;
@@ -985,7 +985,7 @@ Ref<MultiMesh> Voxelizer::create_debug_multimesh() {
 
 	{
 		Ref<StandardMaterial3D> fsm;
-		fsm.instance();
+		fsm.instantiate();
 		fsm->set_flag(StandardMaterial3D::FLAG_SRGB_VERTEX_COLOR, true);
 		fsm->set_flag(StandardMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
 		fsm->set_shading_mode(StandardMaterial3D::SHADING_MODE_UNSHADED);
@@ -1002,12 +1002,9 @@ Ref<MultiMesh> Voxelizer::create_debug_multimesh() {
 	return mm;
 }
 
-Transform Voxelizer::get_to_cell_space_xform() const {
+Transform3D Voxelizer::get_to_cell_space_xform() const {
 	return to_cell_space;
 }
 
 Voxelizer::Voxelizer() {
-	sorted = false;
-	color_scan_cell_width = 4;
-	bake_texture_size = 128;
 }

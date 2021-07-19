@@ -31,14 +31,14 @@
 #include "resource_format_text.h"
 
 #include "core/config/project_settings.h"
+#include "core/io/dir_access.h"
 #include "core/io/resource_format_binary.h"
-#include "core/os/dir_access.h"
 #include "core/version.h"
 
 //version 2: changed names for basis, aabb, Vectors, etc.
 #define FORMAT_VERSION 2
 
-#include "core/os/dir_access.h"
+#include "core/io/dir_access.h"
 #include "core/version.h"
 
 #define _printerr() ERR_PRINT(String(res_path + ":" + itos(lines) + " - Parse Error: " + error_text).utf8().get_data());
@@ -65,7 +65,7 @@ Error ResourceLoaderText::_parse_sub_resource_dummy(DummyReadData *p_data, Varia
 
 	if (!p_data->resource_map.has(index)) {
 		Ref<DummyResource> dr;
-		dr.instance();
+		dr.instantiate();
 		dr->set_subindex(index);
 		p_data->resource_map[index] = dr;
 		p_data->resource_set.insert(dr);
@@ -114,23 +114,8 @@ Error ResourceLoaderText::_parse_sub_resource(VariantParser::Stream *p_stream, R
 	}
 
 	int index = token.value;
-
-	if (use_nocache) {
-		r_res = int_resources[index];
-	} else {
-		String path = local_path + "::" + itos(index);
-
-		if (!ignore_resource_parsing) {
-			if (!ResourceCache::has(path)) {
-				r_err_str = "Can't load cached sub-resource: " + path;
-				return ERR_PARSE_ERROR;
-			}
-
-			r_res = RES(ResourceCache::get(path));
-		} else {
-			r_res = RES();
-		}
-	}
+	ERR_FAIL_COND_V(!int_resources.has(index), ERR_INVALID_PARAMETER);
+	r_res = int_resources[index];
 
 	VariantParser::get_token(p_stream, token, line, r_err_str);
 	if (token.type != VariantParser::TK_PARENTHESIS_CLOSE) {
@@ -198,7 +183,7 @@ Error ResourceLoaderText::_parse_ext_resource(VariantParser::Stream *p_stream, R
 
 Ref<PackedScene> ResourceLoaderText::_parse_node_tag(VariantParser::ResourceParser &parser) {
 	Ref<PackedScene> packed_scene;
-	packed_scene.instance();
+	packed_scene.instantiate();
 
 	while (true) {
 		if (next_tag.name == "node") {
@@ -223,7 +208,7 @@ Ref<PackedScene> ResourceLoaderText::_parse_node_tag(VariantParser::ResourcePars
 			if (next_tag.fields.has("type")) {
 				type = packed_scene->get_state()->add_name(next_tag.fields["type"]);
 			} else {
-				type = SceneState::TYPE_INSTANCED; //no type? assume this was instanced
+				type = SceneState::TYPE_INSTANCED; //no type? assume this was instantiated
 			}
 
 			if (next_tag.fields.has("instance")) {
@@ -440,7 +425,7 @@ Error ResourceLoaderText::load() {
 		er.type = type;
 
 		if (use_sub_threads) {
-			Error err = ResourceLoader::load_threaded_request(path, type, use_sub_threads, local_path);
+			Error err = ResourceLoader::load_threaded_request(path, type, use_sub_threads, ResourceFormatLoader::CACHE_MODE_REUSE, local_path);
 
 			if (err != OK) {
 				if (ResourceLoader::get_abort_on_missing_resources()) {
@@ -517,29 +502,44 @@ Error ResourceLoaderText::load() {
 		//bool exists=ResourceCache::has(path);
 
 		Ref<Resource> res;
+		bool do_assign = false;
 
-		if (use_nocache || !ResourceCache::has(path)) { //only if it doesn't exist
-
-			Object *obj = ClassDB::instance(type);
-			if (!obj) {
-				error_text += "Can't create sub resource of type: " + type;
-				_printerr();
-				error = ERR_FILE_CORRUPT;
-				return error;
+		if (cache_mode == ResourceFormatLoader::CACHE_MODE_REPLACE && ResourceCache::has(path)) {
+			//reuse existing
+			Resource *r = ResourceCache::get(path);
+			if (r && r->get_class() == type) {
+				res = Ref<Resource>(r);
+				res->reset_state();
+				do_assign = true;
 			}
+		}
 
-			Resource *r = Object::cast_to<Resource>(obj);
-			if (!r) {
-				error_text += "Can't create sub resource of type, because not a resource: " + type;
-				_printerr();
-				error = ERR_FILE_CORRUPT;
-				return error;
-			}
+		if (res.is_null()) { //not reuse
+			if (cache_mode != ResourceFormatLoader::CACHE_MODE_IGNORE && ResourceCache::has(path)) { //only if it doesn't exist
+				//cached, do not assign
+				Resource *r = ResourceCache::get(path);
+				res = Ref<Resource>(r);
+			} else {
+				//create
 
-			res = Ref<Resource>(r);
-			int_resources[id] = res;
-			if (!use_nocache) {
-				res->set_path(path);
+				Object *obj = ClassDB::instantiate(type);
+				if (!obj) {
+					error_text += "Can't create sub resource of type: " + type;
+					_printerr();
+					error = ERR_FILE_CORRUPT;
+					return error;
+				}
+
+				Resource *r = Object::cast_to<Resource>(obj);
+				if (!r) {
+					error_text += "Can't create sub resource of type, because not a resource: " + type;
+					_printerr();
+					error = ERR_FILE_CORRUPT;
+					return error;
+				}
+
+				res = Ref<Resource>(r);
+				do_assign = true;
 			}
 		}
 
@@ -557,7 +557,7 @@ Error ResourceLoaderText::load() {
 			}
 
 			if (assign != String()) {
-				if (res.is_valid()) {
+				if (do_assign) {
 					res->set(assign, value);
 				}
 				//it's assignment
@@ -570,6 +570,12 @@ Error ResourceLoaderText::load() {
 				_printerr();
 				return error;
 			}
+		}
+
+		int_resources[id] = res; //always assign int resources
+		if (do_assign && cache_mode != ResourceFormatLoader::CACHE_MODE_IGNORE) {
+			res->set_path(path, cache_mode == ResourceFormatLoader::CACHE_MODE_REPLACE);
+			res->set_subindex(id);
 		}
 
 		if (progress && resources_total > 0) {
@@ -589,23 +595,33 @@ Error ResourceLoaderText::load() {
 			return error;
 		}
 
-		Object *obj = ClassDB::instance(res_type);
-		if (!obj) {
-			error_text += "Can't create sub resource of type: " + res_type;
-			_printerr();
-			error = ERR_FILE_CORRUPT;
-			return error;
+		if (cache_mode == ResourceFormatLoader::CACHE_MODE_REPLACE && ResourceCache::has(local_path)) {
+			Resource *r = ResourceCache::get(local_path);
+			if (r->get_class() == res_type) {
+				r->reset_state();
+				resource = Ref<Resource>(r);
+			}
 		}
 
-		Resource *r = Object::cast_to<Resource>(obj);
-		if (!r) {
-			error_text += "Can't create sub resource of type, because not a resource: " + res_type;
-			_printerr();
-			error = ERR_FILE_CORRUPT;
-			return error;
-		}
+		if (!resource.is_valid()) {
+			Object *obj = ClassDB::instantiate(res_type);
+			if (!obj) {
+				error_text += "Can't create sub resource of type: " + res_type;
+				_printerr();
+				error = ERR_FILE_CORRUPT;
+				return error;
+			}
 
-		resource = Ref<Resource>(r);
+			Resource *r = Object::cast_to<Resource>(obj);
+			if (!r) {
+				error_text += "Can't create sub resource of type, because not a resource: " + res_type;
+				_printerr();
+				error = ERR_FILE_CORRUPT;
+				return error;
+			}
+
+			resource = Ref<Resource>(r);
+		}
 
 		resource_current++;
 
@@ -620,7 +636,7 @@ Error ResourceLoaderText::load() {
 					_printerr();
 				} else {
 					error = OK;
-					if (!use_nocache) {
+					if (cache_mode != ResourceFormatLoader::CACHE_MODE_IGNORE) {
 						if (!ResourceCache::has(res_path)) {
 							resource->set_path(res_path);
 						}
@@ -668,7 +684,7 @@ Error ResourceLoaderText::load() {
 		error = OK;
 		//get it here
 		resource = packed_scene;
-		if (!use_nocache && !ResourceCache::has(res_path)) {
+		if (cache_mode != ResourceFormatLoader::CACHE_MODE_IGNORE && !ResourceCache::has(res_path)) {
 			packed_scene->set_path(res_path);
 		}
 
@@ -699,18 +715,7 @@ void ResourceLoaderText::set_translation_remapped(bool p_remapped) {
 	translation_remapped = p_remapped;
 }
 
-ResourceLoaderText::ResourceLoaderText() {
-	use_nocache = false;
-
-	resources_total = 0;
-	resource_current = 0;
-
-	progress = nullptr;
-	lines = false;
-	translation_remapped = false;
-	use_sub_threads = false;
-	error = OK;
-}
+ResourceLoaderText::ResourceLoaderText() {}
 
 ResourceLoaderText::~ResourceLoaderText() {
 	memdelete(f);
@@ -974,7 +979,7 @@ Error ResourceLoaderText::save_as_binary(FileAccess *p_f, const String &p_path) 
 	}
 
 	wf->store_32(0); //string table size, will not be in use
-	size_t ext_res_count_pos = wf->get_position();
+	uint64_t ext_res_count_pos = wf->get_position();
 
 	wf->store_32(0); //zero ext resources, still parsing them
 
@@ -1017,7 +1022,7 @@ Error ResourceLoaderText::save_as_binary(FileAccess *p_f, const String &p_path) 
 
 		int lindex = dummy_read.external_resources.size();
 		Ref<DummyResource> dr;
-		dr.instance();
+		dr.instantiate();
 		dr->set_path("res://dummy" + itos(lindex)); //anything is good to detect it for saving as external
 		dummy_read.external_resources[dr] = lindex;
 		dummy_read.rev_external_resources[index] = dr;
@@ -1037,7 +1042,7 @@ Error ResourceLoaderText::save_as_binary(FileAccess *p_f, const String &p_path) 
 
 	//now, save resources to a separate file, for now
 
-	size_t sub_res_count_pos = wf->get_position();
+	uint64_t sub_res_count_pos = wf->get_position();
 	wf->store_32(0); //zero sub resources, still parsing them
 
 	String temp_file = p_path + ".temp";
@@ -1046,8 +1051,8 @@ Error ResourceLoaderText::save_as_binary(FileAccess *p_f, const String &p_path) 
 		return ERR_CANT_OPEN;
 	}
 
-	Vector<size_t> local_offsets;
-	Vector<size_t> local_pointers_pos;
+	Vector<uint64_t> local_offsets;
+	Vector<uint64_t> local_pointers_pos;
 
 	while (next_tag.name == "sub_resource" || next_tag.name == "resource") {
 		String type;
@@ -1085,7 +1090,7 @@ Error ResourceLoaderText::save_as_binary(FileAccess *p_f, const String &p_path) 
 		wf->store_64(0); //temp local offset
 
 		bs_save_unicode_string(wf2, type);
-		size_t propcount_ofs = wf2->get_position();
+		uint64_t propcount_ofs = wf2->get_position();
 		wf2->store_32(0);
 
 		int prop_count = 0;
@@ -1155,7 +1160,7 @@ Error ResourceLoaderText::save_as_binary(FileAccess *p_f, const String &p_path) 
 
 		local_offsets.push_back(wf2->get_position());
 		bs_save_unicode_string(wf2, "PackedScene");
-		size_t propcount_ofs = wf2->get_position();
+		uint64_t propcount_ofs = wf2->get_position();
 		wf2->store_32(0);
 
 		int prop_count = 0;
@@ -1181,7 +1186,7 @@ Error ResourceLoaderText::save_as_binary(FileAccess *p_f, const String &p_path) 
 
 	wf2->close();
 
-	size_t offset_from = wf->get_position();
+	uint64_t offset_from = wf->get_position();
 	wf->seek(sub_res_count_pos); //plus one because the saved one
 	wf->store_32(local_offsets.size());
 
@@ -1252,7 +1257,7 @@ String ResourceLoaderText::recognize(FileAccess *p_f) {
 
 /////////////////////
 
-RES ResourceFormatLoaderText::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress, bool p_no_cache) {
+RES ResourceFormatLoaderText::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress, CacheMode p_cache_mode) {
 	if (r_error) {
 		*r_error = ERR_CANT_OPEN;
 	}
@@ -1265,7 +1270,7 @@ RES ResourceFormatLoaderText::load(const String &p_path, const String &p_origina
 
 	ResourceLoaderText loader;
 	String path = p_original_path != "" ? p_original_path : p_path;
-	loader.use_nocache = p_no_cache;
+	loader.cache_mode = p_cache_mode;
 	loader.use_sub_threads = p_use_sub_threads;
 	loader.local_path = ProjectSettings::get_singleton()->localize_path(path);
 	loader.progress = r_progress;
@@ -1317,7 +1322,7 @@ String ResourceFormatLoaderText::get_resource_type(const String &p_path) const {
 
 	FileAccess *f = FileAccess::open(p_path, FileAccess::READ);
 	if (!f) {
-		return ""; //could not rwead
+		return ""; //could not read
 	}
 
 	ResourceLoaderText loader;

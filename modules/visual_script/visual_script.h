@@ -49,7 +49,7 @@ class VisualScriptNode : public Resource {
 	Ref<VisualScript> script_used;
 
 	Array default_input_values;
-	bool breakpoint;
+	bool breakpoint = false;
 
 	void _set_default_input_values(Array p_values);
 	Array _get_default_input_values() const;
@@ -87,16 +87,12 @@ public:
 	void set_breakpoint(bool p_breakpoint);
 	bool is_breakpoint() const;
 
-	virtual VisualScriptNodeInstance *instance(VisualScriptInstance *p_instance) = 0;
+	virtual VisualScriptNodeInstance *instantiate(VisualScriptInstance *p_instance) = 0;
 
 	struct TypeGuess {
-		Variant::Type type;
+		Variant::Type type = Variant::NIL;
 		StringName gdclass;
 		Ref<Script> script;
-
-		TypeGuess() {
-			type = Variant::NIL;
-		}
 	};
 
 	virtual TypeGuess guess_output_type(TypeGuess *p_inputs, int p_output) const;
@@ -114,19 +110,19 @@ class VisualScriptNodeInstance {
 		INPUT_DEFAULT_VALUE_BIT = INPUT_SHIFT, // from unassigned input port, using default value (edited by user)
 	};
 
-	int id;
-	int sequence_index;
-	VisualScriptNodeInstance **sequence_outputs;
-	int sequence_output_count;
+	int id = 0;
+	int sequence_index = 0;
+	VisualScriptNodeInstance **sequence_outputs = nullptr;
+	int sequence_output_count = 0;
 	Vector<VisualScriptNodeInstance *> dependencies;
-	int *input_ports;
-	int input_port_count;
-	int *output_ports;
-	int output_port_count;
-	int working_mem_idx;
-	int pass_idx;
+	int *input_ports = nullptr;
+	int input_port_count = 0;
+	int *output_ports = nullptr;
+	int output_port_count = 0;
+	int working_mem_idx = 0;
+	int pass_idx = 0;
 
-	VisualScriptNode *base;
+	VisualScriptNode *base = nullptr;
 
 public:
 	enum StartMode {
@@ -178,7 +174,7 @@ public:
 				uint64_t from_output : 16;
 				uint64_t to_node : 24;
 			};
-			uint64_t id;
+			uint64_t id = 0;
 		};
 
 		bool operator<(const SequenceConnection &p_connection) const {
@@ -194,7 +190,7 @@ public:
 				uint64_t to_node : 24;
 				uint64_t to_port : 8;
 			};
-			uint64_t id;
+			uint64_t id = 0;
 		};
 
 		bool operator<(const DataConnection &p_connection) const {
@@ -208,7 +204,7 @@ private:
 	StringName base_type;
 	struct Argument {
 		String name;
-		Variant::Type type;
+		Variant::Type type = Variant::Type::NIL;
 	};
 
 	struct NodeData {
@@ -231,15 +227,14 @@ private:
 	struct Variable {
 		PropertyInfo info;
 		Variant default_value;
-		bool _export;
+		bool _export = false;
 		// Add getter & setter options here.
 	};
 
 	HashMap<StringName, Function> functions;
 	HashMap<StringName, Variable> variables;
 	Map<StringName, Vector<Argument>> custom_signals;
-	Vector<ScriptNetData> rpc_functions;
-	Vector<ScriptNetData> rpc_variables;
+	Vector<MultiplayerAPI::RPCConfig> rpc_functions;
 
 	Map<Object *, VisualScriptInstance *> instances;
 
@@ -330,7 +325,7 @@ public:
 
 	void set_instance_base_type(const StringName &p_type);
 
-	virtual bool can_instance() const override;
+	virtual bool can_instantiate() const override;
 
 	virtual Ref<Script> get_base_script() const override;
 	virtual StringName get_instance_base_type() const override;
@@ -367,17 +362,7 @@ public:
 
 	virtual int get_member_line(const StringName &p_member) const override;
 
-	virtual Vector<ScriptNetData> get_rpc_methods() const override;
-	virtual uint16_t get_rpc_method_id(const StringName &p_method) const override;
-	virtual StringName get_rpc_method(const uint16_t p_rpc_method_id) const override;
-	virtual MultiplayerAPI::RPCMode get_rpc_mode_by_id(const uint16_t p_rpc_method_id) const override;
-	virtual MultiplayerAPI::RPCMode get_rpc_mode(const StringName &p_method) const override;
-
-	virtual Vector<ScriptNetData> get_rset_properties() const override;
-	virtual uint16_t get_rset_property_id(const StringName &p_property) const override;
-	virtual StringName get_rset_property(const uint16_t p_rset_property_id) const override;
-	virtual MultiplayerAPI::RPCMode get_rset_mode_by_id(const uint16_t p_rpc_method_id) const override;
-	virtual MultiplayerAPI::RPCMode get_rset_mode(const StringName &p_variable) const override;
+	virtual const Vector<MultiplayerAPI::RPCConfig> get_rpc_methods() const override;
 
 #ifdef TOOLS_ENABLED
 	virtual bool are_subnodes_edited() const;
@@ -388,26 +373,27 @@ public:
 };
 
 class VisualScriptInstance : public ScriptInstance {
-	Object *owner;
+	Object *owner = nullptr;
 	Ref<VisualScript> script;
 
 	Map<StringName, Variant> variables; // Using variable path, not script.
 	Map<int, VisualScriptNodeInstance *> instances;
 
 	struct Function {
-		int node;
-		int max_stack;
-		int trash_pos;
-		int flow_stack_size;
-		int pass_stack_size;
-		int node_count;
-		int argument_count;
+		int node = 0;
+		int max_stack = 0;
+		int trash_pos = 0;
+		int flow_stack_size = 0;
+		int pass_stack_size = 0;
+		int node_count = 0;
+		int argument_count = 0;
 	};
 
 	Map<StringName, Function> functions;
 
 	Vector<Variant> default_values;
-	int max_input_args, max_output_args;
+	int max_input_args = 0;
+	int max_output_args = 0;
 
 	StringName source;
 
@@ -457,36 +443,26 @@ public:
 
 	virtual ScriptLanguage *get_language();
 
-	virtual Vector<ScriptNetData> get_rpc_methods() const;
-	virtual uint16_t get_rpc_method_id(const StringName &p_method) const;
-	virtual StringName get_rpc_method(const uint16_t p_rpc_method_id) const;
-	virtual MultiplayerAPI::RPCMode get_rpc_mode_by_id(const uint16_t p_rpc_method_id) const;
-	virtual MultiplayerAPI::RPCMode get_rpc_mode(const StringName &p_method) const;
-
-	virtual Vector<ScriptNetData> get_rset_properties() const;
-	virtual uint16_t get_rset_property_id(const StringName &p_property) const;
-	virtual StringName get_rset_property(const uint16_t p_rset_property_id) const;
-	virtual MultiplayerAPI::RPCMode get_rset_mode_by_id(const uint16_t p_rpc_method_id) const;
-	virtual MultiplayerAPI::RPCMode get_rset_mode(const StringName &p_variable) const;
+	virtual const Vector<MultiplayerAPI::RPCConfig> get_rpc_methods() const;
 
 	VisualScriptInstance();
 	~VisualScriptInstance();
 };
 
-class VisualScriptFunctionState : public Reference {
-	GDCLASS(VisualScriptFunctionState, Reference);
+class VisualScriptFunctionState : public RefCounted {
+	GDCLASS(VisualScriptFunctionState, RefCounted);
 	friend class VisualScriptInstance;
 
 	ObjectID instance_id;
 	ObjectID script_id;
-	VisualScriptInstance *instance;
+	VisualScriptInstance *instance = nullptr;
 	StringName function;
 	Vector<uint8_t> stack;
-	int working_mem_index;
-	int variant_stack_size;
-	VisualScriptNodeInstance *node;
-	int flow_stack_pos;
-	int pass;
+	int working_mem_index = 0;
+	int variant_stack_size = 0;
+	VisualScriptNodeInstance *node = nullptr;
+	int flow_stack_pos = 0;
+	int pass = 0;
 
 	Variant _signal_callback(const Variant **p_args, int p_argcount, Callable::CallError &r_error);
 
@@ -507,25 +483,25 @@ class VisualScriptLanguage : public ScriptLanguage {
 	Map<String, VisualScriptNodeRegisterFunc> register_funcs;
 
 	struct CallLevel {
-		Variant *stack;
-		Variant **work_mem;
-		const StringName *function;
-		VisualScriptInstance *instance;
-		int *current_id;
+		Variant *stack = nullptr;
+		Variant **work_mem = nullptr;
+		const StringName *function = nullptr;
+		VisualScriptInstance *instance = nullptr;
+		int *current_id = nullptr;
 	};
 
-	int _debug_parse_err_node;
-	String _debug_parse_err_file;
+	int _debug_parse_err_node = -1;
+	String _debug_parse_err_file = "";
 	String _debug_error;
-	int _debug_call_stack_pos;
+	int _debug_call_stack_pos = 0;
 	int _debug_max_call_stack;
 	CallLevel *_call_stack;
 
 public:
-	StringName notification;
+	StringName notification = "_notification";
 	StringName _get_output_port_unsequenced;
-	StringName _step;
-	StringName _subcall;
+	StringName _step = "_step";
+	StringName _subcall = "_subcall";
 
 	static VisualScriptLanguage *singleton;
 
@@ -589,12 +565,13 @@ public:
 
 	/* EDITOR FUNCTIONS */
 	virtual void get_reserved_words(List<String> *p_words) const;
+	virtual bool is_control_flow_keyword(String p_keyword) const;
 	virtual void get_comment_delimiters(List<String> *p_delimiters) const;
 	virtual void get_string_delimiters(List<String> *p_delimiters) const;
 	virtual Ref<Script> get_template(const String &p_class_name, const String &p_base_class_name) const;
 	virtual bool is_using_templates();
 	virtual void make_template(const String &p_class_name, const String &p_base_class_name, Ref<Script> &p_script);
-	virtual bool validate(const String &p_script, int &r_line_error, int &r_col_error, String &r_test_error, const String &p_path = "", List<String> *r_functions = nullptr, List<ScriptLanguage::Warning> *r_warnings = nullptr, Set<int> *r_safe_lines = nullptr) const;
+	virtual bool validate(const String &p_script, const String &p_path = "", List<String> *r_functions = nullptr, List<ScriptLanguage::ScriptError> *r_errors = nullptr, List<ScriptLanguage::Warning> *r_warnings = nullptr, Set<int> *r_safe_lines = nullptr) const;
 	virtual Script *create_script() const;
 	virtual bool has_named_classes() const;
 	virtual bool supports_builtin_mode() const;
@@ -642,7 +619,7 @@ public:
 template <class T>
 static Ref<VisualScriptNode> create_node_generic(const String &p_name) {
 	Ref<T> node;
-	node.instance();
+	node.instantiate();
 	return node;
 }
 

@@ -56,12 +56,12 @@ class EMWSPeer : public WebSocketPeer {
 	GDCIIMPL(EMWSPeer, WebSocketPeer);
 
 private:
-	int peer_sock;
-	WriteMode write_mode;
+	int peer_sock = -1;
+	WriteMode write_mode = WRITE_MODE_BINARY;
 
 	Vector<uint8_t> _packet_buffer;
 	PacketBuffer<uint8_t> _in_buffer;
-	uint8_t _is_string;
+	uint8_t _is_string = 0;
 
 public:
 	Error read_msg(const uint8_t *p_data, uint32_t p_size, bool p_is_string);
@@ -73,7 +73,7 @@ public:
 
 	virtual void close(int p_code = 1000, String p_reason = "");
 	virtual bool is_connected_to_host() const;
-	virtual IP_Address get_connected_host() const;
+	virtual IPAddress get_connected_host() const;
 	virtual uint16_t get_connected_port() const;
 
 	virtual WriteMode get_write_mode() const;

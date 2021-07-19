@@ -10,6 +10,24 @@
 		<link title="VR tutorial index">https://docs.godotengine.org/en/latest/tutorials/vr/index.html</link>
 	</tutorials>
 	<methods>
+		<method name="add_interface">
+			<return type="void">
+			</return>
+			<argument index="0" name="interface" type="XRInterface">
+			</argument>
+			<description>
+				Registers an [XRInterface] object.
+			</description>
+		</method>
+		<method name="add_tracker">
+			<return type="void">
+			</return>
+			<argument index="0" name="tracker" type="XRPositionalTracker">
+			</argument>
+			<description>
+				Registers a new [XRPositionalTracker] that tracks a spatial location in real space.
+			</description>
+		</method>
 		<method name="center_on_hmd">
 			<return type="void">
 			</return>
@@ -26,6 +44,15 @@
 				You should call this method after a few seconds have passed. For instance, when the user requests a realignment of the display holding a designated button on a controller for a short period of time, or when implementing a teleport mechanism.
 			</description>
 		</method>
+		<method name="clear_primary_interface_if">
+			<return type="void">
+			</return>
+			<argument index="0" name="interface" type="XRInterface">
+			</argument>
+			<description>
+				Clears our current primary interface if it is set to the provided interface.
+			</description>
+		</method>
 		<method name="find_interface" qualifiers="const">
 			<return type="XRInterface">
 			</return>
@@ -36,7 +63,7 @@
 			</description>
 		</method>
 		<method name="get_hmd_transform">
-			<return type="Transform">
+			<return type="Transform3D">
 			</return>
 			<description>
 				Returns the primary interface's transformation.
@@ -69,7 +96,7 @@
 			<return type="int">
 			</return>
 			<description>
-				Returns the absolute timestamp (in μs) of the last [XRServer] commit of the AR/VR eyes to [RenderingServer]. The value comes from an internal call to [method OS.get_ticks_usec].
+				Returns the absolute timestamp (in μs) of the last [XRServer] commit of the AR/VR eyes to [RenderingServer]. The value comes from an internal call to [method Time.get_ticks_usec].
 			</description>
 		</method>
 		<method name="get_last_frame_usec">
@@ -83,11 +110,11 @@
 			<return type="int">
 			</return>
 			<description>
-				Returns the absolute timestamp (in μs) of the last [XRServer] process callback. The value comes from an internal call to [method OS.get_ticks_usec].
+				Returns the absolute timestamp (in μs) of the last [XRServer] process callback. The value comes from an internal call to [method Time.get_ticks_usec].
 			</description>
 		</method>
 		<method name="get_reference_frame" qualifiers="const">
-			<return type="Transform">
+			<return type="Transform3D">
 			</return>
 			<description>
 				Returns the reference frame transform. Mostly used internally and exposed for GDNative build interfaces.
@@ -107,6 +134,24 @@
 			</return>
 			<description>
 				Returns the number of trackers currently registered.
+			</description>
+		</method>
+		<method name="remove_interface">
+			<return type="void">
+			</return>
+			<argument index="0" name="interface" type="XRInterface">
+			</argument>
+			<description>
+				Removes this interface.
+			</description>
+		</method>
+		<method name="remove_tracker">
+			<return type="void">
+			</return>
+			<argument index="0" name="tracker" type="XRPositionalTracker">
+			</argument>
+			<description>
+				Removes this positional tracker.
 			</description>
 		</method>
 	</methods>

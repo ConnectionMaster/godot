@@ -35,11 +35,17 @@
 #include "editor_scale.h"
 #include "editor_settings.h"
 #include "editor_themes.h"
-#include "modules/regex/regex.h"
 #include "plugins/script_editor_plugin.h"
 #include "scene/gui/control.h"
 #include "scene/gui/label.h"
 #include "scene/gui/tab_container.h"
+
+#include "modules/modules_enabled.gen.h"
+#ifdef MODULE_REGEX_ENABLED
+#include "modules/regex/regex.h"
+#else
+#error "Can't build editor rename dialog without RegEx module."
+#endif
 
 RenameDialog::RenameDialog(SceneTreeEditor *p_scene_tree_editor, UndoRedo *p_undo_redo) {
 	scene_tree_editor = p_scene_tree_editor;
@@ -434,7 +440,10 @@ String RenameDialog::_substitute(const String &subject, const Node *node, int co
 	}
 
 	int current = EditorNode::get_singleton()->get_editor_data().get_edited_scene();
-	result = result.replace("${SCENE}", EditorNode::get_singleton()->get_editor_data().get_scene_title(current));
+	// Always request the scene title with the extension stripped.
+	// Otherwise, the result could vary depending on whether a scene with the same name
+	// (but different extension) is currently open.
+	result = result.replace("${SCENE}", EditorNode::get_singleton()->get_editor_data().get_scene_title(current, true));
 
 	Node *root_node = SceneTree::get_singleton()->get_edited_scene_root();
 	if (root_node) {
@@ -629,7 +638,7 @@ void RenameDialog::_insert_text(String text) {
 
 	if (_is_main_field(focus_owner)) {
 		focus_owner->selection_delete();
-		focus_owner->append_at_cursor(text);
+		focus_owner->insert_text_at_caret(text);
 		_update_preview();
 	}
 }

@@ -38,8 +38,8 @@ class Listener3D : public Node3D {
 	GDCLASS(Listener3D, Node3D);
 
 private:
-	bool force_change;
-	bool current;
+	bool force_change = false;
+	bool current = false;
 
 	RID scenario_id;
 
@@ -65,7 +65,7 @@ public:
 	void clear_current();
 	bool is_current() const;
 
-	virtual Transform get_listener_transform() const;
+	virtual Transform3D get_listener_transform() const;
 
 	void set_visible_layers(uint32_t p_layers);
 	uint32_t get_visible_layers() const;

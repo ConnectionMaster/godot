@@ -46,8 +46,8 @@ void EditorNetworkProfiler::_notification(int p_what) {
 		outgoing_bandwidth_text->set_right_icon(get_theme_icon("ArrowUp", "EditorIcons"));
 
 		// This needs to be done here to set the faded color when the profiler is first opened
-		incoming_bandwidth_text->add_theme_color_override("font_color_uneditable", get_theme_color("font_color", "Editor") * Color(1, 1, 1, 0.5));
-		outgoing_bandwidth_text->add_theme_color_override("font_color_uneditable", get_theme_color("font_color", "Editor") * Color(1, 1, 1, 0.5));
+		incoming_bandwidth_text->add_theme_color_override("font_uneditable_color", get_theme_color("font_color", "Editor") * Color(1, 1, 1, 0.5));
+		outgoing_bandwidth_text->add_theme_color_override("font_uneditable_color", get_theme_color("font_color", "Editor") * Color(1, 1, 1, 0.5));
 	}
 }
 
@@ -113,10 +113,10 @@ void EditorNetworkProfiler::set_bandwidth(int p_incoming, int p_outgoing) {
 
 	// Make labels more prominent when the bandwidth is greater than 0 to attract user attention
 	incoming_bandwidth_text->add_theme_color_override(
-			"font_color_uneditable",
+			"font_uneditable_color",
 			get_theme_color("font_color", "Editor") * Color(1, 1, 1, p_incoming > 0 ? 1 : 0.5));
 	outgoing_bandwidth_text->add_theme_color_override(
-			"font_color_uneditable",
+			"font_uneditable_color",
 			get_theme_color("font_color", "Editor") * Color(1, 1, 1, p_outgoing > 0 ? 1 : 0.5));
 }
 
@@ -178,19 +178,24 @@ EditorNetworkProfiler::EditorNetworkProfiler() {
 	counters_display->set_column_titles_visible(true);
 	counters_display->set_column_title(0, TTR("Node"));
 	counters_display->set_column_expand(0, true);
-	counters_display->set_column_min_width(0, 60 * EDSCALE);
+	counters_display->set_column_clip_content(0, true);
+	counters_display->set_column_custom_minimum_width(0, 60 * EDSCALE);
 	counters_display->set_column_title(1, TTR("Incoming RPC"));
 	counters_display->set_column_expand(1, false);
-	counters_display->set_column_min_width(1, 120 * EDSCALE);
+	counters_display->set_column_clip_content(1, true);
+	counters_display->set_column_custom_minimum_width(1, 120 * EDSCALE);
 	counters_display->set_column_title(2, TTR("Incoming RSET"));
 	counters_display->set_column_expand(2, false);
-	counters_display->set_column_min_width(2, 120 * EDSCALE);
+	counters_display->set_column_clip_content(2, true);
+	counters_display->set_column_custom_minimum_width(2, 120 * EDSCALE);
 	counters_display->set_column_title(3, TTR("Outgoing RPC"));
 	counters_display->set_column_expand(3, false);
-	counters_display->set_column_min_width(3, 120 * EDSCALE);
+	counters_display->set_column_clip_content(3, true);
+	counters_display->set_column_custom_minimum_width(3, 120 * EDSCALE);
 	counters_display->set_column_title(4, TTR("Outgoing RSET"));
 	counters_display->set_column_expand(4, false);
-	counters_display->set_column_min_width(4, 120 * EDSCALE);
+	counters_display->set_column_clip_content(4, true);
+	counters_display->set_column_custom_minimum_width(4, 120 * EDSCALE);
 	add_child(counters_display);
 
 	frame_delay = memnew(Timer);

@@ -113,7 +113,7 @@ public:
 			}
 
 			Ref<VisualScriptFunctionState> state;
-			state.instance();
+			state.instantiate();
 
 			int ret = STEP_YIELD_BIT;
 			switch (mode) {
@@ -138,7 +138,7 @@ public:
 	}
 };
 
-VisualScriptNodeInstance *VisualScriptYield::instance(VisualScriptInstance *p_instance) {
+VisualScriptNodeInstance *VisualScriptYield::instantiate(VisualScriptInstance *p_instance) {
 	VisualScriptNodeInstanceYield *instance = memnew(VisualScriptNodeInstanceYield);
 	//instance->instance=p_instance;
 	instance->mode = yield_mode;
@@ -152,7 +152,7 @@ void VisualScriptYield::set_yield_mode(YieldMode p_mode) {
 	}
 	yield_mode = p_mode;
 	ports_changed_notify();
-	_change_notify();
+	notify_property_list_changed();
 }
 
 VisualScriptYield::YieldMode VisualScriptYield::get_yield_mode() {
@@ -174,7 +174,7 @@ float VisualScriptYield::get_wait_time() {
 void VisualScriptYield::_validate_property(PropertyInfo &property) const {
 	if (property.name == "wait_time") {
 		if (yield_mode != YIELD_WAIT) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		}
 	}
 }
@@ -202,7 +202,7 @@ VisualScriptYield::VisualScriptYield() {
 template <VisualScriptYield::YieldMode MODE>
 static Ref<VisualScriptNode> create_yield_node(const String &p_name) {
 	Ref<VisualScriptYield> node;
-	node.instance();
+	node.instantiate();
 	node->set_yield_mode(MODE);
 	return node;
 }
@@ -359,7 +359,7 @@ void VisualScriptYieldSignal::set_base_type(const StringName &p_type) {
 
 	base_type = p_type;
 
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -374,7 +374,7 @@ void VisualScriptYieldSignal::set_signal(const StringName &p_type) {
 
 	signal = p_type;
 
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -389,7 +389,7 @@ void VisualScriptYieldSignal::set_base_path(const NodePath &p_type) {
 
 	base_path = p_type;
 
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -404,7 +404,7 @@ void VisualScriptYieldSignal::set_call_mode(CallMode p_mode) {
 
 	call_mode = p_mode;
 
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -421,11 +421,11 @@ void VisualScriptYieldSignal::_validate_property(PropertyInfo &property) const {
 
 	if (property.name == "node_path") {
 		if (call_mode != CALL_MODE_NODE_PATH) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		} else {
 			Node *bnode = _get_base_node();
 			if (bnode) {
-				property.hint_string = bnode->get_path(); //convert to loong string
+				property.hint_string = bnode->get_path(); //convert to long string
 			}
 		}
 	}
@@ -548,7 +548,7 @@ public:
 			}
 
 			Ref<VisualScriptFunctionState> state;
-			state.instance();
+			state.instantiate();
 
 			state->connect_to_signal(object, signal, Array());
 
@@ -559,7 +559,7 @@ public:
 	}
 };
 
-VisualScriptNodeInstance *VisualScriptYieldSignal::instance(VisualScriptInstance *p_instance) {
+VisualScriptNodeInstance *VisualScriptYieldSignal::instantiate(VisualScriptInstance *p_instance) {
 	VisualScriptNodeInstanceYieldSignal *instance = memnew(VisualScriptNodeInstanceYieldSignal);
 	instance->node = this;
 	instance->instance = p_instance;
@@ -578,7 +578,7 @@ VisualScriptYieldSignal::VisualScriptYieldSignal() {
 template <VisualScriptYieldSignal::CallMode cmode>
 static Ref<VisualScriptNode> create_yield_signal_node(const String &p_name) {
 	Ref<VisualScriptYieldSignal> node;
-	node.instance();
+	node.instantiate();
 	node->set_call_mode(cmode);
 	return node;
 }

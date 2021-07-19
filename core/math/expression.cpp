@@ -33,7 +33,7 @@
 #include "core/io/marshalls.h"
 #include "core/math/math_funcs.h"
 #include "core/object/class_db.h"
-#include "core/object/reference.h"
+#include "core/object/ref_counted.h"
 #include "core/os/os.h"
 #include "core/variant/variant_parser.h"
 
@@ -978,7 +978,7 @@ Expression::ENode *Expression::_parse_expression() {
 		}
 	}
 
-	/* Reduce the set set of expressions and place them in an operator tree, respecting precedence */
+	/* Reduce the set of expressions and place them in an operator tree, respecting precedence */
 
 	while (expression.size() > 1) {
 		int next_op = -1;

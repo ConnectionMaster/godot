@@ -31,13 +31,12 @@
 #include "export.h"
 
 #include "core/config/project_settings.h"
-#include "core/core_bind.h"
 #include "core/crypto/crypto_core.h"
+#include "core/io/dir_access.h"
+#include "core/io/file_access.h"
 #include "core/io/marshalls.h"
 #include "core/io/zip_io.h"
 #include "core/object/class_db.h"
-#include "core/os/dir_access.h"
-#include "core/os/file_access.h"
 #include "core/version.h"
 #include "editor/editor_export.h"
 #include "editor/editor_node.h"
@@ -567,12 +566,12 @@ void AppxPackager::finish() {
 	// Create and add block map file
 	EditorNode::progress_task_step("export", "Creating block map...", 4);
 
-	const String &tmp_blockmap_file_path = EditorSettings::get_singleton()->get_cache_dir().plus_file("tmpblockmap.xml");
+	const String &tmp_blockmap_file_path = EditorPaths::get_singleton()->get_cache_dir().plus_file("tmpblockmap.xml");
 	make_block_map(tmp_blockmap_file_path);
 
 	FileAccess *blockmap_file = FileAccess::open(tmp_blockmap_file_path, FileAccess::READ);
 	Vector<uint8_t> blockmap_buffer;
-	blockmap_buffer.resize(blockmap_file->get_len());
+	blockmap_buffer.resize(blockmap_file->get_length());
 
 	blockmap_file->get_buffer(blockmap_buffer.ptrw(), blockmap_buffer.size());
 
@@ -585,12 +584,12 @@ void AppxPackager::finish() {
 
 	EditorNode::progress_task_step("export", "Setting content types...", 5);
 
-	const String &tmp_content_types_file_path = EditorSettings::get_singleton()->get_cache_dir().plus_file("tmpcontenttypes.xml");
+	const String &tmp_content_types_file_path = EditorPaths::get_singleton()->get_cache_dir().plus_file("tmpcontenttypes.xml");
 	make_content_types(tmp_content_types_file_path);
 
 	FileAccess *types_file = FileAccess::open(tmp_content_types_file_path, FileAccess::READ);
 	Vector<uint8_t> types_buffer;
-	types_buffer.resize(types_file->get_len());
+	types_buffer.resize(types_file->get_length());
 
 	types_file->get_buffer(types_buffer.ptrw(), types_buffer.size());
 
@@ -855,33 +854,33 @@ class EditorExportPlatformUWP : public EditorExportPlatform {
 
 	Vector<uint8_t> _get_image_data(const Ref<EditorExportPreset> &p_preset, const String &p_path) {
 		Vector<uint8_t> data;
-		StreamTexture2D *image = nullptr;
+		StreamTexture2D *texture = nullptr;
 
 		if (p_path.find("StoreLogo") != -1) {
-			image = p_preset->get("images/store_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/store_logo")));
+			texture = p_preset->get("images/store_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/store_logo")));
 		} else if (p_path.find("Square44x44Logo") != -1) {
-			image = p_preset->get("images/square44x44_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/square44x44_logo")));
+			texture = p_preset->get("images/square44x44_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/square44x44_logo")));
 		} else if (p_path.find("Square71x71Logo") != -1) {
-			image = p_preset->get("images/square71x71_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/square71x71_logo")));
+			texture = p_preset->get("images/square71x71_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/square71x71_logo")));
 		} else if (p_path.find("Square150x150Logo") != -1) {
-			image = p_preset->get("images/square150x150_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/square150x150_logo")));
+			texture = p_preset->get("images/square150x150_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/square150x150_logo")));
 		} else if (p_path.find("Square310x310Logo") != -1) {
-			image = p_preset->get("images/square310x310_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/square310x310_logo")));
+			texture = p_preset->get("images/square310x310_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/square310x310_logo")));
 		} else if (p_path.find("Wide310x150Logo") != -1) {
-			image = p_preset->get("images/wide310x150_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/wide310x150_logo")));
+			texture = p_preset->get("images/wide310x150_logo").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/wide310x150_logo")));
 		} else if (p_path.find("SplashScreen") != -1) {
-			image = p_preset->get("images/splash_screen").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/splash_screen")));
+			texture = p_preset->get("images/splash_screen").is_zero() ? nullptr : Object::cast_to<StreamTexture2D>(((Object *)p_preset->get("images/splash_screen")));
 		} else {
 			ERR_PRINT("Unable to load logo");
 		}
 
-		if (!image) {
+		if (!texture) {
 			return data;
 		}
 
-		String tmp_path = EditorSettings::get_singleton()->get_cache_dir().plus_file("uwp_tmp_logo.png");
+		String tmp_path = EditorPaths::get_singleton()->get_cache_dir().plus_file("uwp_tmp_logo.png");
 
-		Error err = image->get_data()->save_png(tmp_path);
+		Error err = texture->get_image()->save_png(tmp_path);
 
 		if (err != OK) {
 			String err_string = "Couldn't save temp logo file.";
@@ -900,7 +899,7 @@ class EditorExportPlatformUWP : public EditorExportPlatform {
 			ERR_FAIL_V_MSG(data, err_string);
 		}
 
-		data.resize(f->get_len());
+		data.resize(f->get_length());
 		f->get_buffer(data.ptrw(), data.size());
 
 		f->close();
@@ -1049,19 +1048,19 @@ public:
 		// Capabilities
 		const char **basic = uwp_capabilities;
 		while (*basic) {
-			r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "capabilities/" + String(*basic).camelcase_to_underscore(false)), false));
+			r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "capabilities/" + String(*basic)), false));
 			basic++;
 		}
 
 		const char **uap = uwp_uap_capabilities;
 		while (*uap) {
-			r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "capabilities/" + String(*uap).camelcase_to_underscore(false)), false));
+			r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "capabilities/" + String(*uap)), false));
 			uap++;
 		}
 
 		const char **device = uwp_device_capabilities;
 		while (*device) {
-			r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "capabilities/" + String(*device).camelcase_to_underscore(false)), false));
+			r_options->push_back(ExportOption(PropertyInfo(Variant::BOOL, "capabilities/" + String(*device)), false));
 			device++;
 		}
 	}
@@ -1177,6 +1176,8 @@ public:
 	}
 
 	virtual Error export_project(const Ref<EditorExportPreset> &p_preset, bool p_debug, const String &p_path, int p_flags = 0) override {
+		ExportNotifier notifier(*this, p_preset, p_debug, p_path, p_flags);
+
 		String src_appx;
 
 		EditorProgress ep("export", "Exporting for UWP", 7, true);
@@ -1334,7 +1335,7 @@ public:
 			int base = clf.size();
 			clf.resize(base + 4 + txt.length());
 			encode_uint32(txt.length(), &clf.write[base]);
-			copymem(&clf.write[base + 4], txt.ptr(), txt.length());
+			memcpy(&clf.write[base + 4], txt.ptr(), txt.length());
 			print_line(itos(i) + " param: " + cl[i]);
 		}
 
@@ -1427,7 +1428,7 @@ public:
 
 	EditorExportPlatformUWP() {
 		Ref<Image> img = memnew(Image(_uwp_logo));
-		logo.instance();
+		logo.instantiate();
 		logo->create_from_image(img);
 	}
 };
@@ -1444,6 +1445,6 @@ void register_uwp_exporter() {
 #endif // WINDOWS_ENABLED
 
 	Ref<EditorExportPlatformUWP> exporter;
-	exporter.instance();
+	exporter.instantiate();
 	EditorExport::get_singleton()->add_export_platform(exporter);
 }

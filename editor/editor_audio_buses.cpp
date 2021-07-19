@@ -78,11 +78,11 @@ void EditorAudioBus::_notification(int p_what) {
 			Color bypass_color = EditorSettings::get_singleton()->is_dark_theme() ? Color(0.13, 0.8, 1.0) : Color(0.44, 0.87, 1.0);
 
 			solo->set_icon(get_theme_icon("AudioBusSolo", "EditorIcons"));
-			solo->add_theme_color_override("icon_color_pressed", solo_color);
+			solo->add_theme_color_override("icon_pressed_color", solo_color);
 			mute->set_icon(get_theme_icon("AudioBusMute", "EditorIcons"));
-			mute->add_theme_color_override("icon_color_pressed", mute_color);
+			mute->add_theme_color_override("icon_pressed_color", mute_color);
 			bypass->set_icon(get_theme_icon("AudioBusBypass", "EditorIcons"));
-			bypass->add_theme_color_override("icon_color_pressed", bypass_color);
+			bypass->add_theme_color_override("icon_pressed_color", bypass_color);
 
 			bus_options->set_icon(get_theme_icon("GuiTabMenuHl", "EditorIcons"));
 
@@ -173,6 +173,9 @@ void EditorAudioBus::_notification(int p_what) {
 			bypass->set_icon(get_theme_icon("AudioBusBypass", "EditorIcons"));
 
 			bus_options->set_icon(get_theme_icon("GuiTabMenuHl", "EditorIcons"));
+
+			audio_value_preview_box->add_theme_color_override("font_color", get_theme_color("font_color", "TooltipLabel"));
+			audio_value_preview_box->add_theme_style_override("panel", get_theme_stylebox("panel", "TooltipPanel"));
 		} break;
 		case NOTIFICATION_MOUSE_EXIT:
 		case NOTIFICATION_DRAG_END: {
@@ -312,7 +315,7 @@ void EditorAudioBus::_volume_changed(float p_normalized) {
 
 	const float p_db = this->_normalized_volume_to_scaled_db(p_normalized);
 
-	if (Input::get_singleton()->is_key_pressed(KEY_CONTROL)) {
+	if (Input::get_singleton()->is_key_pressed(KEY_CTRL)) {
 		// Snap the value when holding Ctrl for easier editing.
 		// To do so, it needs to be converted back to normalized volume (as the slider uses that unit).
 		slider->set_value(_scaled_db_to_normalized_volume(Math::round(p_db)));
@@ -372,22 +375,31 @@ float EditorAudioBus::_scaled_db_to_normalized_volume(float db) {
 
 void EditorAudioBus::_show_value(float slider_value) {
 	float db;
-	if (Input::get_singleton()->is_key_pressed(KEY_CONTROL)) {
+	if (Input::get_singleton()->is_key_pressed(KEY_CTRL)) {
 		// Display the correct (snapped) value when holding Ctrl
 		db = Math::round(_normalized_volume_to_scaled_db(slider_value));
 	} else {
 		db = _normalized_volume_to_scaled_db(slider_value);
 	}
 
-	String text = vformat("%10.1f dB", db);
+	String text;
+	if (Math::is_zero_approx(Math::snapped(db, 0.1))) {
+		// Prevent displaying `-0.0 dB` and show ` 0.0 dB` instead.
+		// The leading space makes the text visually line up with its positive/negative counterparts.
+		text = " 0.0 dB";
+	} else {
+		// Show an explicit `+` sign if positive.
+		text = vformat("%+.1f dB", db);
+	}
 
+	// Also set the preview text as a standard Control tooltip.
+	// This way, it can be seen when the slider is merely hovered (instead of dragged).
 	slider->set_tooltip(text);
 	audio_value_preview_label->set_text(text);
-	Vector2 slider_size = slider->get_size();
-	Vector2 slider_position = slider->get_global_position();
-	float left_padding = 5.0f;
-	float vert_padding = 10.0f;
-	Vector2 box_position = Vector2(slider_size.x + left_padding, (slider_size.y - vert_padding) * (1.0f - slider->get_value()) - vert_padding);
+	const Vector2 slider_size = slider->get_size();
+	const Vector2 slider_position = slider->get_global_position();
+	const float vert_padding = 10.0f;
+	const Vector2 box_position = Vector2(slider_size.x, (slider_size.y - vert_padding) * (1.0f - slider->get_value()) - vert_padding);
 	audio_value_preview_box->set_position(slider_position + box_position);
 	audio_value_preview_box->set_size(audio_value_preview_label->get_size());
 	if (slider->has_focus() && !audio_value_preview_box->is_visible()) {
@@ -513,7 +525,7 @@ void EditorAudioBus::_effect_add(int p_which) {
 
 	StringName name = effect_options->get_item_metadata(p_which);
 
-	Object *fx = ClassDB::instance(name);
+	Object *fx = ClassDB::instantiate(name);
 	ERR_FAIL_COND(!fx);
 	AudioEffect *afx = Object::cast_to<AudioEffect>(fx);
 	ERR_FAIL_COND(!afx);
@@ -531,8 +543,10 @@ void EditorAudioBus::_effect_add(int p_which) {
 }
 
 void EditorAudioBus::_gui_input(const Ref<InputEvent> &p_event) {
+	ERR_FAIL_COND(p_event.is_null());
+
 	Ref<InputEventMouseButton> mb = p_event;
-	if (mb.is_valid() && mb->get_button_index() == BUTTON_RIGHT && mb->is_pressed()) {
+	if (mb.is_valid() && mb->get_button_index() == MOUSE_BUTTON_RIGHT && mb->is_pressed()) {
 		Vector2 pos = Vector2(mb->get_position().x, mb->get_position().y);
 		bus_popup->set_position(get_global_position() + pos);
 		bus_popup->popup();
@@ -743,9 +757,9 @@ void EditorAudioBus::_bind_methods() {
 	ClassDB::bind_method("update_bus", &EditorAudioBus::update_bus);
 	ClassDB::bind_method("update_send", &EditorAudioBus::update_send);
 	ClassDB::bind_method("_gui_input", &EditorAudioBus::_gui_input);
-	ClassDB::bind_method("get_drag_data_fw", &EditorAudioBus::get_drag_data_fw);
-	ClassDB::bind_method("can_drop_data_fw", &EditorAudioBus::can_drop_data_fw);
-	ClassDB::bind_method("drop_data_fw", &EditorAudioBus::drop_data_fw);
+	ClassDB::bind_method("_get_drag_data_fw", &EditorAudioBus::get_drag_data_fw);
+	ClassDB::bind_method("_can_drop_data_fw", &EditorAudioBus::can_drop_data_fw);
+	ClassDB::bind_method("_drop_data_fw", &EditorAudioBus::drop_data_fw);
 
 	ADD_SIGNAL(MethodInfo("duplicate_request"));
 	ADD_SIGNAL(MethodInfo("delete_request"));
@@ -768,7 +782,7 @@ EditorAudioBus::EditorAudioBus(EditorAudioBuses *p_buses, bool p_is_master) {
 	set_v_size_flags(SIZE_EXPAND_FILL);
 
 	track_name = memnew(LineEdit);
-	track_name->connect("text_entered", callable_mp(this, &EditorAudioBus::_name_changed));
+	track_name->connect("text_submitted", callable_mp(this, &EditorAudioBus::_name_changed));
 	track_name->connect("focus_exited", callable_mp(this, &EditorAudioBus::_name_focus_exit));
 	vb->add_child(track_name);
 
@@ -828,14 +842,13 @@ EditorAudioBus::EditorAudioBus(EditorAudioBuses *p_buses, bool p_is_master) {
 	audio_value_preview_label->set_v_size_flags(SIZE_EXPAND_FILL);
 	audio_value_preview_label->set_h_size_flags(SIZE_EXPAND_FILL);
 	audio_value_preview_label->set_mouse_filter(MOUSE_FILTER_PASS);
+	audio_value_preview_box->add_theme_color_override("font_color", get_theme_color("font_color", "TooltipLabel"));
 
 	audioprev_hbc->add_child(audio_value_preview_label);
 
 	slider->add_child(audio_value_preview_box);
 	audio_value_preview_box->set_as_top_level(true);
-	Ref<StyleBoxFlat> panel_style = memnew(StyleBoxFlat);
-	panel_style->set_bg_color(Color(0.0f, 0.0f, 0.0f, 0.8f));
-	audio_value_preview_box->add_theme_style_override("panel", panel_style);
+	audio_value_preview_box->add_theme_style_override("panel", get_theme_stylebox("panel", "TooltipPanel"));
 	audio_value_preview_box->set_mouse_filter(MOUSE_FILTER_PASS);
 	audio_value_preview_box->hide();
 
@@ -908,7 +921,7 @@ EditorAudioBus::EditorAudioBus(EditorAudioBuses *p_buses, bool p_is_master) {
 	ClassDB::get_inheriters_from_class("AudioEffect", &effects);
 	effects.sort_custom<StringName::AlphCompare>();
 	for (List<StringName>::Element *E = effects.front(); E; E = E->next()) {
-		if (!ClassDB::can_instance(E->get())) {
+		if (!ClassDB::can_instantiate(E->get())) {
 			continue;
 		}
 
@@ -923,7 +936,7 @@ EditorAudioBus::EditorAudioBus(EditorAudioBuses *p_buses, bool p_is_master) {
 	bus_options->set_shortcut_context(this);
 	bus_options->set_h_size_flags(SIZE_SHRINK_END);
 	bus_options->set_anchor(SIDE_RIGHT, 0.0);
-	bus_options->set_tooltip(TTR("Bus options"));
+	bus_options->set_tooltip(TTR("Bus Options"));
 	hbc->add_child(bus_options);
 
 	bus_popup = bus_options->get_popup();
@@ -1191,9 +1204,9 @@ void EditorAudioBuses::_load_layout() {
 }
 
 void EditorAudioBuses::_load_default_layout() {
-	String layout_path = ProjectSettings::get_singleton()->get("audio/default_bus_layout");
+	String layout_path = ProjectSettings::get_singleton()->get("audio/buses/default_bus_layout");
 
-	Ref<AudioBusLayout> state = ResourceLoader::load(layout_path, "", true);
+	Ref<AudioBusLayout> state = ResourceLoader::load(layout_path, "", ResourceFormatLoader::CACHE_MODE_IGNORE);
 	if (state.is_null()) {
 		EditorNode::get_singleton()->show_warning(vformat(TTR("There is no '%s' file."), layout_path));
 		return;
@@ -1209,7 +1222,7 @@ void EditorAudioBuses::_load_default_layout() {
 
 void EditorAudioBuses::_file_dialog_callback(const String &p_string) {
 	if (file_dialog->get_file_mode() == EditorFileDialog::FILE_MODE_OPEN_FILE) {
-		Ref<AudioBusLayout> state = ResourceLoader::load(p_string, "", true);
+		Ref<AudioBusLayout> state = ResourceLoader::load(p_string, "", ResourceFormatLoader::CACHE_MODE_IGNORE);
 		if (state.is_null()) {
 			EditorNode::get_singleton()->show_warning(TTR("Invalid file, not an audio bus layout."));
 			return;
@@ -1225,7 +1238,7 @@ void EditorAudioBuses::_file_dialog_callback(const String &p_string) {
 	} else if (file_dialog->get_file_mode() == EditorFileDialog::FILE_MODE_SAVE_FILE) {
 		if (new_layout) {
 			Ref<AudioBusLayout> empty_state;
-			empty_state.instance();
+			empty_state.instantiate();
 			AudioServer::get_singleton()->set_bus_layout(empty_state);
 		}
 
@@ -1257,7 +1270,7 @@ EditorAudioBuses::EditorAudioBuses() {
 	add_child(top_hb);
 
 	file = memnew(Label);
-	String layout_path = ProjectSettings::get_singleton()->get("audio/default_bus_layout");
+	String layout_path = ProjectSettings::get_singleton()->get("audio/buses/default_bus_layout");
 	file->set_text(String(TTR("Layout")) + ": " + layout_path.get_file());
 	file->set_clip_text(true);
 	file->set_h_size_flags(SIZE_EXPAND_FILL);
@@ -1313,7 +1326,7 @@ EditorAudioBuses::EditorAudioBuses() {
 
 	set_v_size_flags(SIZE_EXPAND_FILL);
 
-	edited_path = ProjectSettings::get_singleton()->get("audio/default_bus_layout");
+	edited_path = ProjectSettings::get_singleton()->get("audio/buses/default_bus_layout");
 
 	file_dialog = memnew(EditorFileDialog);
 	List<String> ext;
@@ -1330,7 +1343,7 @@ EditorAudioBuses::EditorAudioBuses() {
 void EditorAudioBuses::open_layout(const String &p_path) {
 	EditorNode::get_singleton()->make_bottom_panel_item_visible(this);
 
-	Ref<AudioBusLayout> state = ResourceLoader::load(p_path, "", true);
+	Ref<AudioBusLayout> state = ResourceLoader::load(p_path, "", ResourceFormatLoader::CACHE_MODE_IGNORE);
 	if (state.is_null()) {
 		EditorNode::get_singleton()->show_warning(TTR("Invalid file, not an audio bus layout."));
 		return;
@@ -1398,7 +1411,7 @@ void EditorAudioMeterNotches::_bind_methods() {
 void EditorAudioMeterNotches::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_THEME_CHANGED: {
-			notch_color = EditorSettings::get_singleton()->is_dark_theme() ? Color(1, 1, 1) : Color(0, 0, 0);
+			notch_color = get_theme_color("font_color", "Editor");
 		} break;
 		case NOTIFICATION_DRAW: {
 			_draw_audio_notches();
@@ -1414,13 +1427,13 @@ void EditorAudioMeterNotches::_draw_audio_notches() {
 	for (int i = 0; i < notches.size(); i++) {
 		AudioNotch n = notches[i];
 		draw_line(Vector2(0, (1.0f - n.relative_position) * (get_size().y - btm_padding - top_padding) + top_padding),
-				Vector2(line_length, (1.0f - n.relative_position) * (get_size().y - btm_padding - top_padding) + top_padding),
+				Vector2(line_length * EDSCALE, (1.0f - n.relative_position) * (get_size().y - btm_padding - top_padding) + top_padding),
 				notch_color,
-				1);
+				Math::round(EDSCALE));
 
 		if (n.render_db_value) {
 			draw_string(font,
-					Vector2(line_length + label_space,
+					Vector2((line_length + label_space) * EDSCALE,
 							(1.0f - n.relative_position) * (get_size().y - btm_padding - top_padding) + (font_height / 4) + top_padding),
 					String::num(Math::abs(n.db_value)) + "dB",
 					HALIGN_LEFT, -1, font_size,
@@ -1430,5 +1443,5 @@ void EditorAudioMeterNotches::_draw_audio_notches() {
 }
 
 EditorAudioMeterNotches::EditorAudioMeterNotches() {
-	notch_color = EditorSettings::get_singleton()->is_dark_theme() ? Color(1, 1, 1) : Color(0, 0, 0);
+	notch_color = get_theme_color("font_color", "Editor");
 }

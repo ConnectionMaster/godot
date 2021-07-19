@@ -30,8 +30,8 @@
 
 #include "audio_stream_sample.h"
 
+#include "core/io/file_access.h"
 #include "core/io/marshalls.h"
-#include "core/os/file_access.h"
 
 void AudioStreamPlaybackSample::start(float p_from_pos) {
 	if (base->format == AudioStreamSample::FORMAT_IMA_ADPCM) {
@@ -403,11 +403,7 @@ void AudioStreamPlaybackSample::mix(AudioFrame *p_buffer, float p_rate_scale, in
 	}
 }
 
-AudioStreamPlaybackSample::AudioStreamPlaybackSample() {
-	active = false;
-	offset = 0;
-	sign = 1;
-}
+AudioStreamPlaybackSample::AudioStreamPlaybackSample() {}
 
 /////////////////////
 
@@ -494,9 +490,9 @@ void AudioStreamSample::set_data(const Vector<uint8_t> &p_data) {
 		const uint8_t *r = p_data.ptr();
 		int alloc_len = datalen + DATA_PAD * 2;
 		data = memalloc(alloc_len); //alloc with some padding for interpolation
-		zeromem(data, alloc_len);
+		memset(data, 0, alloc_len);
 		uint8_t *dataptr = (uint8_t *)data;
-		copymem(dataptr + DATA_PAD, r, datalen);
+		memcpy(dataptr + DATA_PAD, r, datalen);
 		data_bytes = datalen;
 	}
 
@@ -511,7 +507,7 @@ Vector<uint8_t> AudioStreamSample::get_data() const {
 		{
 			uint8_t *w = pv.ptrw();
 			uint8_t *dataptr = (uint8_t *)data;
-			copymem(w, dataptr + DATA_PAD, data_bytes);
+			memcpy(w, dataptr + DATA_PAD, data_bytes);
 		}
 	}
 
@@ -600,7 +596,7 @@ Error AudioStreamSample::save_to_wav(const String &p_path) {
 
 Ref<AudioStreamPlayback> AudioStreamSample::instance_playback() {
 	Ref<AudioStreamPlaybackSample> sample;
-	sample.instance();
+	sample.instantiate();
 	sample->base = Ref<AudioStreamSample>(this);
 	return sample;
 }
@@ -651,16 +647,7 @@ void AudioStreamSample::_bind_methods() {
 	BIND_ENUM_CONSTANT(LOOP_BACKWARD);
 }
 
-AudioStreamSample::AudioStreamSample() {
-	format = FORMAT_8_BITS;
-	loop_mode = LOOP_DISABLED;
-	stereo = false;
-	loop_begin = 0;
-	loop_end = 0;
-	mix_rate = 44100;
-	data = nullptr;
-	data_bytes = 0;
-}
+AudioStreamSample::AudioStreamSample() {}
 
 AudioStreamSample::~AudioStreamSample() {
 	if (data) {

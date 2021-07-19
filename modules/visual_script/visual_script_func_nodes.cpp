@@ -281,7 +281,7 @@ void VisualScriptFunctionCall::set_basic_type(Variant::Type p_type) {
 	}
 	basic_type = p_type;
 
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -295,7 +295,7 @@ void VisualScriptFunctionCall::set_base_type(const StringName &p_type) {
 	}
 
 	base_type = p_type;
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -309,7 +309,7 @@ void VisualScriptFunctionCall::set_base_script(const String &p_path) {
 	}
 
 	base_script = p_path;
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -328,7 +328,7 @@ void VisualScriptFunctionCall::set_singleton(const StringName &p_type) {
 		base_type = obj->get_class();
 	}
 
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -425,7 +425,7 @@ void VisualScriptFunctionCall::set_function(const StringName &p_type) {
 		_update_method_cache();
 	}
 
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -439,7 +439,7 @@ void VisualScriptFunctionCall::set_base_path(const NodePath &p_type) {
 	}
 
 	base_path = p_type;
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -453,7 +453,7 @@ void VisualScriptFunctionCall::set_call_mode(CallMode p_mode) {
 	}
 
 	call_mode = p_mode;
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -476,7 +476,7 @@ void VisualScriptFunctionCall::set_rpc_call_mode(VisualScriptFunctionCall::RPCCa
 	}
 	rpc_call_mode = p_mode;
 	ports_changed_notify();
-	_change_notify();
+	notify_property_list_changed();
 }
 
 VisualScriptFunctionCall::RPCCallMode VisualScriptFunctionCall::get_rpc_call_mode() const {
@@ -513,19 +513,19 @@ void VisualScriptFunctionCall::_validate_property(PropertyInfo &property) const 
 
 	if (property.name == "base_script") {
 		if (call_mode != CALL_MODE_INSTANCE) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		}
 	}
 
 	if (property.name == "basic_type") {
 		if (call_mode != CALL_MODE_BASIC_TYPE) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		}
 	}
 
 	if (property.name == "singleton") {
 		if (call_mode != CALL_MODE_SINGLETON) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		} else {
 			List<Engine::Singleton> names;
 			Engine::get_singleton()->get_singletons(&names);
@@ -543,11 +543,11 @@ void VisualScriptFunctionCall::_validate_property(PropertyInfo &property) const 
 
 	if (property.name == "node_path") {
 		if (call_mode != CALL_MODE_NODE_PATH) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		} else {
 			Node *bnode = _get_base_node();
 			if (bnode) {
-				property.hint_string = bnode->get_path(); //convert to loong string
+				property.hint_string = bnode->get_path(); //convert to long string
 			}
 		}
 	}
@@ -614,7 +614,7 @@ void VisualScriptFunctionCall::_validate_property(PropertyInfo &property) const 
 		}
 
 		if (mc == 0) {
-			property.usage = 0; //do not show
+			property.usage = PROPERTY_USAGE_NONE; //do not show
 		} else {
 			property.hint_string = "0," + itos(mc) + ",1";
 		}
@@ -622,7 +622,7 @@ void VisualScriptFunctionCall::_validate_property(PropertyInfo &property) const 
 
 	if (property.name == "rpc_call_mode") {
 		if (call_mode == CALL_MODE_BASIC_TYPE) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		}
 	}
 }
@@ -737,20 +737,22 @@ public:
 		}
 
 		int to_id = 0;
-		bool reliable = true;
+		//bool reliable = true;
 
 		if (rpc_mode >= VisualScriptFunctionCall::RPC_RELIABLE_TO_ID) {
 			to_id = *p_args[0];
 			p_args += 1;
 			p_argcount -= 1;
-			if (rpc_mode == VisualScriptFunctionCall::RPC_UNRELIABLE_TO_ID) {
-				reliable = false;
-			}
-		} else if (rpc_mode == VisualScriptFunctionCall::RPC_UNRELIABLE) {
-			reliable = false;
+			//if (rpc_mode == VisualScriptFunctionCall::RPC_UNRELIABLE_TO_ID) {
+			//reliable = false;
+			//}
 		}
+		//else if (rpc_mode == VisualScriptFunctionCall::RPC_UNRELIABLE) {
+		//reliable = false;
+		//}
 
-		node->rpcp(to_id, !reliable, function, p_args, p_argcount);
+		// TODO reliable?
+		node->rpcp(to_id, function, p_args, p_argcount);
 
 		return true;
 	}
@@ -854,7 +856,7 @@ public:
 	}
 };
 
-VisualScriptNodeInstance *VisualScriptFunctionCall::instance(VisualScriptInstance *p_instance) {
+VisualScriptNodeInstance *VisualScriptFunctionCall::instantiate(VisualScriptInstance *p_instance) {
 	VisualScriptNodeInstanceFunctionCall *instance = memnew(VisualScriptNodeInstanceFunctionCall);
 	instance->node = this;
 	instance->instance = p_instance;
@@ -889,7 +891,7 @@ VisualScriptFunctionCall::VisualScriptFunctionCall() {
 template <VisualScriptFunctionCall::CallMode cmode>
 static Ref<VisualScriptNode> create_function_call_node(const String &p_name) {
 	Ref<VisualScriptFunctionCall> node;
-	node.instance();
+	node.instantiate();
 	node->set_call_mode(cmode);
 	return node;
 }
@@ -1067,7 +1069,7 @@ void VisualScriptPropertySet::set_basic_type(Variant::Type p_type) {
 	}
 	basic_type = p_type;
 
-	_change_notify();
+	notify_property_list_changed();
 	_update_base_type();
 	ports_changed_notify();
 }
@@ -1082,7 +1084,7 @@ void VisualScriptPropertySet::set_base_type(const StringName &p_type) {
 	}
 
 	base_type = p_type;
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1096,7 +1098,7 @@ void VisualScriptPropertySet::set_base_script(const String &p_path) {
 	}
 
 	base_script = p_path;
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1191,7 +1193,7 @@ void VisualScriptPropertySet::set_property(const StringName &p_type) {
 	property = p_type;
 	index = StringName();
 	_update_cache();
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1206,7 +1208,7 @@ void VisualScriptPropertySet::set_base_path(const NodePath &p_type) {
 
 	base_path = p_type;
 	_update_base_type();
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1221,7 +1223,7 @@ void VisualScriptPropertySet::set_call_mode(CallMode p_mode) {
 
 	call_mode = p_mode;
 	_update_base_type();
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1243,7 +1245,7 @@ void VisualScriptPropertySet::set_index(const StringName &p_type) {
 	}
 	index = p_type;
 	_update_cache();
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1259,7 +1261,7 @@ void VisualScriptPropertySet::set_assign_op(AssignOp p_op) {
 
 	assign_op = p_op;
 	_update_cache();
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1276,23 +1278,23 @@ void VisualScriptPropertySet::_validate_property(PropertyInfo &property) const {
 
 	if (property.name == "base_script") {
 		if (call_mode != CALL_MODE_INSTANCE) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		}
 	}
 
 	if (property.name == "basic_type") {
 		if (call_mode != CALL_MODE_BASIC_TYPE) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		}
 	}
 
 	if (property.name == "node_path") {
 		if (call_mode != CALL_MODE_NODE_PATH) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		} else {
 			Node *bnode = _get_base_node();
 			if (bnode) {
-				property.hint_string = bnode->get_path(); //convert to loong string
+				property.hint_string = bnode->get_path(); //convert to long string
 			}
 		}
 	}
@@ -1350,7 +1352,7 @@ void VisualScriptPropertySet::_validate_property(PropertyInfo &property) const {
 		property.hint_string = options;
 		property.type = Variant::STRING;
 		if (options == "") {
-			property.usage = 0; //hide if type has no usable index
+			property.usage = PROPERTY_USAGE_NONE; //hide if type has no usable index
 		}
 	}
 }
@@ -1585,7 +1587,7 @@ public:
 	}
 };
 
-VisualScriptNodeInstance *VisualScriptPropertySet::instance(VisualScriptInstance *p_instance) {
+VisualScriptNodeInstance *VisualScriptPropertySet::instantiate(VisualScriptInstance *p_instance) {
 	VisualScriptNodeInstancePropertySet *instance = memnew(VisualScriptNodeInstancePropertySet);
 	instance->node = this;
 	instance->instance = p_instance;
@@ -1616,7 +1618,7 @@ VisualScriptPropertySet::VisualScriptPropertySet() {
 template <VisualScriptPropertySet::CallMode cmode>
 static Ref<VisualScriptNode> create_property_set_node(const String &p_name) {
 	Ref<VisualScriptPropertySet> node;
-	node.instance();
+	node.instantiate();
 	node->set_call_mode(cmode);
 	return node;
 }
@@ -1760,7 +1762,7 @@ void VisualScriptPropertyGet::set_base_type(const StringName &p_type) {
 	}
 
 	base_type = p_type;
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1774,7 +1776,7 @@ void VisualScriptPropertyGet::set_base_script(const String &p_path) {
 	}
 
 	base_script = p_path;
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1871,7 +1873,7 @@ void VisualScriptPropertyGet::set_property(const StringName &p_type) {
 	property = p_type;
 
 	_update_cache();
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1885,7 +1887,7 @@ void VisualScriptPropertyGet::set_base_path(const NodePath &p_type) {
 	}
 
 	base_path = p_type;
-	_change_notify();
+	notify_property_list_changed();
 	_update_base_type();
 	ports_changed_notify();
 }
@@ -1900,7 +1902,7 @@ void VisualScriptPropertyGet::set_call_mode(CallMode p_mode) {
 	}
 
 	call_mode = p_mode;
-	_change_notify();
+	notify_property_list_changed();
 	_update_base_type();
 	ports_changed_notify();
 }
@@ -1915,7 +1917,7 @@ void VisualScriptPropertyGet::set_basic_type(Variant::Type p_type) {
 	}
 	basic_type = p_type;
 
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1937,7 +1939,7 @@ void VisualScriptPropertyGet::set_index(const StringName &p_type) {
 	}
 	index = p_type;
 	_update_cache();
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -1954,23 +1956,23 @@ void VisualScriptPropertyGet::_validate_property(PropertyInfo &property) const {
 
 	if (property.name == "base_script") {
 		if (call_mode != CALL_MODE_INSTANCE) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		}
 	}
 
 	if (property.name == "basic_type") {
 		if (call_mode != CALL_MODE_BASIC_TYPE) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		}
 	}
 
 	if (property.name == "node_path") {
 		if (call_mode != CALL_MODE_NODE_PATH) {
-			property.usage = 0;
+			property.usage = PROPERTY_USAGE_NONE;
 		} else {
 			Node *bnode = _get_base_node();
 			if (bnode) {
-				property.hint_string = bnode->get_path(); //convert to loong string
+				property.hint_string = bnode->get_path(); //convert to long string
 			}
 		}
 	}
@@ -2027,7 +2029,7 @@ void VisualScriptPropertyGet::_validate_property(PropertyInfo &property) const {
 		property.hint_string = options;
 		property.type = Variant::STRING;
 		if (options == "") {
-			property.usage = 0; //hide if type has no usable index
+			property.usage = PROPERTY_USAGE_NONE; //hide if type has no usable index
 		}
 	}
 }
@@ -2173,7 +2175,7 @@ public:
 	}
 };
 
-VisualScriptNodeInstance *VisualScriptPropertyGet::instance(VisualScriptInstance *p_instance) {
+VisualScriptNodeInstance *VisualScriptPropertyGet::instantiate(VisualScriptInstance *p_instance) {
 	VisualScriptNodeInstancePropertyGet *instance = memnew(VisualScriptNodeInstancePropertyGet);
 	instance->node = this;
 	instance->instance = p_instance;
@@ -2195,7 +2197,7 @@ VisualScriptPropertyGet::VisualScriptPropertyGet() {
 template <VisualScriptPropertyGet::CallMode cmode>
 static Ref<VisualScriptNode> create_property_get_node(const String &p_name) {
 	Ref<VisualScriptPropertyGet> node;
-	node.instance();
+	node.instantiate();
 	node->set_call_mode(cmode);
 	return node;
 }
@@ -2261,7 +2263,7 @@ void VisualScriptEmitSignal::set_signal(const StringName &p_type) {
 
 	name = p_type;
 
-	_change_notify();
+	notify_property_list_changed();
 	ports_changed_notify();
 }
 
@@ -2319,7 +2321,7 @@ public:
 	}
 };
 
-VisualScriptNodeInstance *VisualScriptEmitSignal::instance(VisualScriptInstance *p_instance) {
+VisualScriptNodeInstance *VisualScriptEmitSignal::instantiate(VisualScriptInstance *p_instance) {
 	VisualScriptNodeInstanceEmitSignal *instance = memnew(VisualScriptNodeInstanceEmitSignal);
 	instance->node = this;
 	instance->instance = p_instance;
@@ -2338,7 +2340,7 @@ static Ref<VisualScriptNode> create_basic_type_call_node(const String &p_name) {
 	String method = path[3];
 
 	Ref<VisualScriptFunctionCall> node;
-	node.instance();
+	node.instantiate();
 
 	Variant::Type type = Variant::VARIANT_MAX;
 

@@ -33,30 +33,31 @@
 #include "core/os/os.h"
 #include "core/os/thread.h"
 #include "core/string/print_string.h"
+#include "core/templates/safe_refcount.h"
 
 #include <ConvectionKernels.h>
 
 struct CVTTCompressionJobParams {
-	bool is_hdr;
-	bool is_signed;
-	int bytes_per_pixel;
+	bool is_hdr = false;
+	bool is_signed = false;
+	int bytes_per_pixel = 0;
 
 	cvtt::Options options;
 };
 
 struct CVTTCompressionRowTask {
 	const uint8_t *in_mm_bytes;
-	uint8_t *out_mm_bytes;
-	int y_start;
-	int width;
-	int height;
+	uint8_t *out_mm_bytes = nullptr;
+	int y_start = 0;
+	int width = 0;
+	int height = 0;
 };
 
 struct CVTTCompressionJobQueue {
 	CVTTCompressionJobParams job_params;
 	const CVTTCompressionRowTask *job_tasks;
-	uint32_t num_tasks;
-	uint32_t current_task;
+	uint32_t num_tasks = 0;
+	SafeNumeric<uint32_t> current_task;
 };
 
 static void _digest_row_task(const CVTTCompressionJobParams &p_job_params, const CVTTCompressionRowTask &p_row_task) {
@@ -131,7 +132,7 @@ static void _digest_row_task(const CVTTCompressionJobParams &p_job_params, const
 static void _digest_job_queue(void *p_job_queue) {
 	CVTTCompressionJobQueue *job_queue = static_cast<CVTTCompressionJobQueue *>(p_job_queue);
 
-	for (uint32_t next_task = atomic_increment(&job_queue->current_task); next_task <= job_queue->num_tasks; next_task = atomic_increment(&job_queue->current_task)) {
+	for (uint32_t next_task = job_queue->current_task.increment(); next_task <= job_queue->num_tasks; next_task = job_queue->current_task.increment()) {
 		_digest_row_task(job_queue->job_params, job_queue->job_tasks[next_task - 1]);
 	}
 }
@@ -263,16 +264,17 @@ void image_compress_cvtt(Image *p_image, float p_lossy_quality, Image::UsedChann
 		const CVTTCompressionRowTask *tasks_rb = tasks.ptr();
 
 		job_queue.job_tasks = &tasks_rb[0];
-		job_queue.current_task = 0;
+		job_queue.current_task.set(0);
 		job_queue.num_tasks = static_cast<uint32_t>(tasks.size());
 
 		for (int i = 0; i < num_job_threads; i++) {
-			threads_wb[i] = Thread::create(_digest_job_queue, &job_queue);
+			threads_wb[i] = memnew(Thread);
+			threads_wb[i]->start(_digest_job_queue, &job_queue);
 		}
 		_digest_job_queue(&job_queue);
 
 		for (int i = 0; i < num_job_threads; i++) {
-			Thread::wait_to_finish(threads_wb[i]);
+			threads_wb[i]->wait_to_finish();
 			memdelete(threads_wb[i]);
 		}
 	}

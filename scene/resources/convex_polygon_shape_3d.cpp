@@ -29,7 +29,7 @@
 /*************************************************************************/
 
 #include "convex_polygon_shape_3d.h"
-#include "core/math/quick_hull.h"
+#include "core/math/convex_hull.h"
 #include "servers/physics_server_3d.h"
 
 Vector<Vector3> ConvexPolygonShape3D::get_debug_mesh_lines() const {
@@ -38,7 +38,7 @@ Vector<Vector3> ConvexPolygonShape3D::get_debug_mesh_lines() const {
 	if (points.size() > 3) {
 		Vector<Vector3> varr = Variant(points);
 		Geometry3D::MeshData md;
-		Error err = QuickHull::build(varr, md);
+		Error err = ConvexHullComputer::convex_hull(varr, md);
 		if (err == OK) {
 			Vector<Vector3> lines;
 			lines.resize(md.edges.size() * 2);
@@ -56,7 +56,7 @@ Vector<Vector3> ConvexPolygonShape3D::get_debug_mesh_lines() const {
 real_t ConvexPolygonShape3D::get_enclosing_radius() const {
 	Vector<Vector3> data = get_points();
 	const Vector3 *read = data.ptr();
-	real_t r = 0;
+	real_t r = 0.0;
 	for (int i(0); i < data.size(); i++) {
 		r = MAX(read[i].length_squared(), r);
 	}

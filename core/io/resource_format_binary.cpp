@@ -31,10 +31,10 @@
 #include "resource_format_binary.h"
 
 #include "core/config/project_settings.h"
+#include "core/io/dir_access.h"
 #include "core/io/file_access_compressed.h"
 #include "core/io/image.h"
 #include "core/io/marshalls.h"
-#include "core/os/dir_access.h"
 #include "core/version.h"
 
 //#define print_bl(m_what) print_line(m_what)
@@ -51,7 +51,7 @@ enum {
 	VARIANT_RECT2 = 11,
 	VARIANT_VECTOR3 = 12,
 	VARIANT_PLANE = 13,
-	VARIANT_QUAT = 14,
+	VARIANT_QUATERNION = 14,
 	VARIANT_AABB = 15,
 	VARIANT_MATRIX3 = 16,
 	VARIANT_TRANSFORM = 17,
@@ -199,8 +199,8 @@ Error ResourceLoaderBinary::parse_variant(Variant &r_v) {
 			v.d = f->get_real();
 			r_v = v;
 		} break;
-		case VARIANT_QUAT: {
-			Quat v;
+		case VARIANT_QUATERNION: {
+			Quaternion v;
 			v.x = f->get_real();
 			v.y = f->get_real();
 			v.z = f->get_real();
@@ -245,7 +245,7 @@ Error ResourceLoaderBinary::parse_variant(Variant &r_v) {
 
 		} break;
 		case VARIANT_TRANSFORM: {
-			Transform v;
+			Transform3D v;
 			v.basis.elements[0].x = f->get_real();
 			v.basis.elements[0].y = f->get_real();
 			v.basis.elements[0].z = f->get_real();
@@ -261,11 +261,11 @@ Error ResourceLoaderBinary::parse_variant(Variant &r_v) {
 			r_v = v;
 		} break;
 		case VARIANT_COLOR: {
-			Color v;
-			v.r = f->get_real();
-			v.g = f->get_real();
-			v.b = f->get_real();
-			v.a = f->get_real();
+			Color v; // Colors should always be in single-precision.
+			v.r = f->get_float();
+			v.g = f->get_float();
+			v.b = f->get_float();
+			v.a = f->get_float();
 			r_v = v;
 
 		} break;
@@ -313,17 +313,12 @@ Error ResourceLoaderBinary::parse_variant(Variant &r_v) {
 					uint32_t index = f->get_32();
 					String path = res_path + "::" + itos(index);
 
-					if (use_nocache) {
-						if (!internal_index_cache.has(path)) {
-							WARN_PRINT(String("Couldn't load resource (no cache): " + path).utf8().get_data());
-						}
-						r_v = internal_index_cache[path];
+					//always use internal cache for loading internal resources
+					if (!internal_index_cache.has(path)) {
+						WARN_PRINT(String("Couldn't load resource (no cache): " + path).utf8().get_data());
+						r_v = Variant();
 					} else {
-						RES res = ResourceLoader::load(path);
-						if (res.is_null()) {
-							WARN_PRINT(String("Couldn't load resource: " + path).utf8().get_data());
-						}
-						r_v = res;
+						r_v = internal_index_cache[path];
 					}
 
 				} break;
@@ -645,7 +640,7 @@ Error ResourceLoaderBinary::load() {
 			}
 
 		} else {
-			Error err = ResourceLoader::load_threaded_request(path, external_resources[i].type, use_sub_threads, local_path);
+			Error err = ResourceLoader::load_threaded_request(path, external_resources[i].type, use_sub_threads, ResourceFormatLoader::CACHE_MODE_REUSE, local_path);
 			if (err != OK) {
 				if (!ResourceLoader::get_abort_on_missing_resources()) {
 					ResourceLoader::notify_dependency_error(local_path, path, external_resources[i].type);
@@ -675,7 +670,7 @@ Error ResourceLoaderBinary::load() {
 				path = res_path + "::" + path;
 			}
 
-			if (!use_nocache) {
+			if (cache_mode == ResourceFormatLoader::CACHE_MODE_REUSE) {
 				if (ResourceCache::has(path)) {
 					//already loaded, don't do anything
 					stage++;
@@ -684,7 +679,7 @@ Error ResourceLoaderBinary::load() {
 				}
 			}
 		} else {
-			if (!use_nocache && !ResourceCache::has(res_path)) {
+			if (cache_mode != ResourceFormatLoader::CACHE_MODE_IGNORE && !ResourceCache::has(res_path)) {
 				path = res_path;
 			}
 		}
@@ -695,26 +690,40 @@ Error ResourceLoaderBinary::load() {
 
 		String t = get_unicode_string();
 
-		Object *obj = ClassDB::instance(t);
-		if (!obj) {
-			error = ERR_FILE_CORRUPT;
-			ERR_FAIL_V_MSG(ERR_FILE_CORRUPT, local_path + ":Resource of unrecognized type in file: " + t + ".");
+		RES res;
+
+		if (cache_mode == ResourceFormatLoader::CACHE_MODE_REPLACE && ResourceCache::has(path)) {
+			//use the existing one
+			Resource *r = ResourceCache::get(path);
+			if (r->get_class() == t) {
+				r->reset_state();
+				res = Ref<Resource>(r);
+			}
 		}
 
-		Resource *r = Object::cast_to<Resource>(obj);
-		if (!r) {
-			String obj_class = obj->get_class();
-			error = ERR_FILE_CORRUPT;
-			memdelete(obj); //bye
-			ERR_FAIL_V_MSG(ERR_FILE_CORRUPT, local_path + ":Resource type in resource field not a resource, type is: " + obj_class + ".");
-		}
+		if (res.is_null()) {
+			//did not replace
 
-		RES res = RES(r);
+			Object *obj = ClassDB::instantiate(t);
+			if (!obj) {
+				error = ERR_FILE_CORRUPT;
+				ERR_FAIL_V_MSG(ERR_FILE_CORRUPT, local_path + ":Resource of unrecognized type in file: " + t + ".");
+			}
 
-		if (path != String()) {
-			r->set_path(path);
+			Resource *r = Object::cast_to<Resource>(obj);
+			if (!r) {
+				String obj_class = obj->get_class();
+				error = ERR_FILE_CORRUPT;
+				memdelete(obj); //bye
+				ERR_FAIL_V_MSG(ERR_FILE_CORRUPT, local_path + ":Resource type in resource field not a resource, type is: " + obj_class + ".");
+			}
+
+			res = RES(r);
+			if (path != String() && cache_mode != ResourceFormatLoader::CACHE_MODE_IGNORE) {
+				r->set_path(path, cache_mode == ResourceFormatLoader::CACHE_MODE_REPLACE); //if got here because the resource with same path has different type, replace it
+			}
+			r->set_subindex(subindex);
 		}
-		r->set_subindex(subindex);
 
 		if (!main) {
 			internal_index_cache[path] = res;
@@ -842,7 +851,7 @@ void ResourceLoaderBinary::open(FileAccess *p_f) {
 	bool big_endian = f->get_32();
 	bool use_real64 = f->get_32();
 
-	f->set_endian_swap(big_endian != 0); //read big endian if saved as big endian
+	f->set_big_endian(big_endian != 0); //read big endian if saved as big endian
 
 	uint32_t ver_major = f->get_32();
 	uint32_t ver_minor = f->get_32();
@@ -939,7 +948,7 @@ String ResourceLoaderBinary::recognize(FileAccess *p_f) {
 	bool big_endian = f->get_32();
 	f->get_32(); // use_real64
 
-	f->set_endian_swap(big_endian != 0); //read big endian if saved as big endian
+	f->set_big_endian(big_endian != 0); //read big endian if saved as big endian
 
 	uint32_t ver_major = f->get_32();
 	f->get_32(); // ver_minor
@@ -961,7 +970,7 @@ ResourceLoaderBinary::~ResourceLoaderBinary() {
 	}
 }
 
-RES ResourceFormatLoaderBinary::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress, bool p_no_cache) {
+RES ResourceFormatLoaderBinary::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress, CacheMode p_cache_mode) {
 	if (r_error) {
 		*r_error = ERR_FILE_CANT_OPEN;
 	}
@@ -972,7 +981,7 @@ RES ResourceFormatLoaderBinary::load(const String &p_path, const String &p_origi
 	ERR_FAIL_COND_V_MSG(err != OK, RES(), "Cannot open file '" + p_path + "'.");
 
 	ResourceLoaderBinary loader;
-	loader.use_nocache = p_no_cache;
+	loader.cache_mode = p_cache_mode;
 	loader.use_sub_threads = p_use_sub_threads;
 	loader.progress = r_progress;
 	String path = p_original_path != "" ? p_original_path : p_path;
@@ -1088,13 +1097,13 @@ Error ResourceFormatLoaderBinary::rename_dependencies(const String &p_path, cons
 	bool big_endian = f->get_32();
 	bool use_real64 = f->get_32();
 
-	f->set_endian_swap(big_endian != 0); //read big endian if saved as big endian
+	f->set_big_endian(big_endian != 0); //read big endian if saved as big endian
 #ifdef BIG_ENDIAN_ENABLED
 	fw->store_32(!big_endian);
 #else
 	fw->store_32(big_endian);
 #endif
-	fw->set_endian_swap(big_endian != 0);
+	fw->set_big_endian(big_endian != 0);
 	fw->store_32(use_real64); //use real64
 
 	uint32_t ver_major = f->get_32();
@@ -1148,8 +1157,8 @@ Error ResourceFormatLoaderBinary::rename_dependencies(const String &p_path, cons
 
 	save_ustring(fw, get_ustring(f)); //type
 
-	size_t md_ofs = f->get_position();
-	size_t importmd_ofs = f->get_64();
+	uint64_t md_ofs = f->get_position();
+	uint64_t importmd_ofs = f->get_64();
 	fw->store_64(0); //metadata offset
 
 	for (int i = 0; i < 14; i++) {
@@ -1236,7 +1245,7 @@ Error ResourceFormatLoaderBinary::rename_dependencies(const String &p_path, cons
 String ResourceFormatLoaderBinary::get_resource_type(const String &p_path) const {
 	FileAccess *f = FileAccess::open(p_path, FileAccess::READ);
 	if (!f) {
-		return ""; //could not rwead
+		return ""; //could not read
 	}
 
 	ResourceLoaderBinary loader;
@@ -1362,9 +1371,9 @@ void ResourceFormatSaverBinaryInstance::write_variant(FileAccess *f, const Varia
 			f->store_real(val.d);
 
 		} break;
-		case Variant::QUAT: {
-			f->store_32(VARIANT_QUAT);
-			Quat val = p_property;
+		case Variant::QUATERNION: {
+			f->store_32(VARIANT_QUATERNION);
+			Quaternion val = p_property;
 			f->store_real(val.x);
 			f->store_real(val.y);
 			f->store_real(val.z);
@@ -1407,9 +1416,9 @@ void ResourceFormatSaverBinaryInstance::write_variant(FileAccess *f, const Varia
 			f->store_real(val.elements[2].z);
 
 		} break;
-		case Variant::TRANSFORM: {
+		case Variant::TRANSFORM3D: {
 			f->store_32(VARIANT_TRANSFORM);
-			Transform val = p_property;
+			Transform3D val = p_property;
 			f->store_real(val.basis.elements[0].x);
 			f->store_real(val.basis.elements[0].y);
 			f->store_real(val.basis.elements[0].z);
@@ -1789,7 +1798,7 @@ Error ResourceFormatSaverBinaryInstance::save(const String &p_path, const RES &p
 
 	if (big_endian) {
 		f->store_32(1);
-		f->set_endian_swap(true);
+		f->set_big_endian(true);
 	} else {
 		f->store_32(0);
 	}

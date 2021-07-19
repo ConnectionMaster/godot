@@ -30,8 +30,7 @@
 
 #include "physics_server_2d_sw.h"
 
-#include "broad_phase_2d_basic.h"
-#include "broad_phase_2d_hash_grid.h"
+#include "broad_phase_2d_bvh.h"
 #include "collision_solver_2d_sw.h"
 #include "core/config/project_settings.h"
 #include "core/debugger/engine_debugger.h"
@@ -367,7 +366,7 @@ void PhysicsServer2DSW::area_set_shape_disabled(RID p_area, int p_shape, bool p_
 	ERR_FAIL_INDEX(p_shape, area->get_shape_count());
 	FLUSH_QUERY_CHECK(area);
 
-	area->set_shape_as_disabled(p_shape, p_disabled);
+	area->set_shape_disabled(p_shape, p_disabled);
 }
 
 int PhysicsServer2DSW::area_get_shape_count(RID p_area) const {
@@ -664,10 +663,10 @@ void PhysicsServer2DSW::body_set_shape_disabled(RID p_body, int p_shape_idx, boo
 	ERR_FAIL_INDEX(p_shape_idx, body->get_shape_count());
 	FLUSH_QUERY_CHECK(body);
 
-	body->set_shape_as_disabled(p_shape_idx, p_disabled);
+	body->set_shape_disabled(p_shape_idx, p_disabled);
 }
 
-void PhysicsServer2DSW::body_set_shape_as_one_way_collision(RID p_body, int p_shape_idx, bool p_enable, float p_margin) {
+void PhysicsServer2DSW::body_set_shape_as_one_way_collision(RID p_body, int p_shape_idx, bool p_enable, real_t p_margin) {
 	Body2DSW *body = body_owner.getornull(p_body);
 	ERR_FAIL_COND(!body);
 	ERR_FAIL_INDEX(p_shape_idx, body->get_shape_count());
@@ -927,10 +926,10 @@ int PhysicsServer2DSW::body_get_max_contacts_reported(RID p_body) const {
 	return body->get_max_contacts_reported();
 }
 
-void PhysicsServer2DSW::body_set_force_integration_callback(RID p_body, Object *p_receiver, const StringName &p_method, const Variant &p_udata) {
+void PhysicsServer2DSW::body_set_force_integration_callback(RID p_body, const Callable &p_callable, const Variant &p_udata) {
 	Body2DSW *body = body_owner.getornull(p_body);
 	ERR_FAIL_COND(!body);
-	body->set_force_integration_callback(p_receiver ? p_receiver->get_instance_id() : ObjectID(), p_method, p_udata);
+	body->set_force_integration_callback(p_callable, p_udata);
 }
 
 bool PhysicsServer2DSW::body_collide_shape(RID p_body, int p_body_shape, RID p_shape, const Transform2D &p_shape_xform, const Vector2 &p_motion, Vector2 *r_results, int p_result_max, int &r_result_count) {
@@ -947,7 +946,7 @@ void PhysicsServer2DSW::body_set_pickable(RID p_body, bool p_pickable) {
 	body->set_pickable(p_pickable);
 }
 
-bool PhysicsServer2DSW::body_test_motion(RID p_body, const Transform2D &p_from, const Vector2 &p_motion, bool p_infinite_inertia, real_t p_margin, MotionResult *r_result, bool p_exclude_raycast_shapes) {
+bool PhysicsServer2DSW::body_test_motion(RID p_body, const Transform2D &p_from, const Vector2 &p_motion, bool p_infinite_inertia, real_t p_margin, MotionResult *r_result, bool p_exclude_raycast_shapes, const Set<RID> &p_exclude) {
 	Body2DSW *body = body_owner.getornull(p_body);
 	ERR_FAIL_COND_V(!body, false);
 	ERR_FAIL_COND_V(!body->get_space(), false);
@@ -955,10 +954,10 @@ bool PhysicsServer2DSW::body_test_motion(RID p_body, const Transform2D &p_from, 
 
 	_update_shapes();
 
-	return body->get_space()->test_body_motion(body, p_from, p_motion, p_infinite_inertia, p_margin, r_result, p_exclude_raycast_shapes);
+	return body->get_space()->test_body_motion(body, p_from, p_motion, p_infinite_inertia, p_margin, r_result, p_exclude_raycast_shapes, p_exclude);
 }
 
-int PhysicsServer2DSW::body_test_ray_separation(RID p_body, const Transform2D &p_transform, bool p_infinite_inertia, Vector2 &r_recover_motion, SeparationResult *r_results, int p_result_max, float p_margin) {
+int PhysicsServer2DSW::body_test_ray_separation(RID p_body, const Transform2D &p_transform, bool p_infinite_inertia, Vector2 &r_recover_motion, SeparationResult *r_results, int p_result_max, real_t p_margin) {
 	Body2DSW *body = body_owner.getornull(p_body);
 	ERR_FAIL_COND_V(!body, false);
 	ERR_FAIL_COND_V(!body->get_space(), false);
@@ -984,6 +983,24 @@ PhysicsDirectBodyState2D *PhysicsServer2DSW::body_get_direct_state(RID p_body) {
 }
 
 /* JOINT API */
+
+RID PhysicsServer2DSW::joint_create() {
+	Joint2DSW *joint = memnew(Joint2DSW);
+	RID joint_rid = joint_owner.make_rid(joint);
+	joint->set_self(joint_rid);
+	return joint_rid;
+}
+
+void PhysicsServer2DSW::joint_clear(RID p_joint) {
+	Joint2DSW *joint = joint_owner.getornull(p_joint);
+	if (joint->get_type() != JOINT_TYPE_MAX) {
+		Joint2DSW *empty_joint = memnew(Joint2DSW);
+		empty_joint->copy_settings_from(joint);
+
+		joint_owner.replace(p_joint, empty_joint);
+		memdelete(joint);
+	}
+}
 
 void PhysicsServer2DSW::joint_set_param(RID p_joint, JointParam p_param, real_t p_value) {
 	Joint2DSW *joint = joint_owner.getornull(p_joint);
@@ -1048,52 +1065,63 @@ bool PhysicsServer2DSW::joint_is_disabled_collisions_between_bodies(RID p_joint)
 	return joint->is_disabled_collisions_between_bodies();
 }
 
-RID PhysicsServer2DSW::pin_joint_create(const Vector2 &p_pos, RID p_body_a, RID p_body_b) {
+void PhysicsServer2DSW::joint_make_pin(RID p_joint, const Vector2 &p_pos, RID p_body_a, RID p_body_b) {
 	Body2DSW *A = body_owner.getornull(p_body_a);
-	ERR_FAIL_COND_V(!A, RID());
+	ERR_FAIL_COND(!A);
 	Body2DSW *B = nullptr;
 	if (body_owner.owns(p_body_b)) {
 		B = body_owner.getornull(p_body_b);
-		ERR_FAIL_COND_V(!B, RID());
+		ERR_FAIL_COND(!B);
 	}
 
-	Joint2DSW *joint = memnew(PinJoint2DSW(p_pos, A, B));
-	RID self = joint_owner.make_rid(joint);
-	joint->set_self(self);
+	Joint2DSW *prev_joint = joint_owner.getornull(p_joint);
+	ERR_FAIL_COND(prev_joint == nullptr);
 
-	return self;
+	Joint2DSW *joint = memnew(PinJoint2DSW(p_pos, A, B));
+
+	joint_owner.replace(p_joint, joint);
+	joint->copy_settings_from(prev_joint);
+	memdelete(prev_joint);
 }
 
-RID PhysicsServer2DSW::groove_joint_create(const Vector2 &p_a_groove1, const Vector2 &p_a_groove2, const Vector2 &p_b_anchor, RID p_body_a, RID p_body_b) {
+void PhysicsServer2DSW::joint_make_groove(RID p_joint, const Vector2 &p_a_groove1, const Vector2 &p_a_groove2, const Vector2 &p_b_anchor, RID p_body_a, RID p_body_b) {
 	Body2DSW *A = body_owner.getornull(p_body_a);
-	ERR_FAIL_COND_V(!A, RID());
+	ERR_FAIL_COND(!A);
 
 	Body2DSW *B = body_owner.getornull(p_body_b);
-	ERR_FAIL_COND_V(!B, RID());
+	ERR_FAIL_COND(!B);
+
+	Joint2DSW *prev_joint = joint_owner.getornull(p_joint);
+	ERR_FAIL_COND(prev_joint == nullptr);
 
 	Joint2DSW *joint = memnew(GrooveJoint2DSW(p_a_groove1, p_a_groove2, p_b_anchor, A, B));
-	RID self = joint_owner.make_rid(joint);
-	joint->set_self(self);
-	return self;
+
+	joint_owner.replace(p_joint, joint);
+	joint->copy_settings_from(prev_joint);
+	memdelete(prev_joint);
 }
 
-RID PhysicsServer2DSW::damped_spring_joint_create(const Vector2 &p_anchor_a, const Vector2 &p_anchor_b, RID p_body_a, RID p_body_b) {
+void PhysicsServer2DSW::joint_make_damped_spring(RID p_joint, const Vector2 &p_anchor_a, const Vector2 &p_anchor_b, RID p_body_a, RID p_body_b) {
 	Body2DSW *A = body_owner.getornull(p_body_a);
-	ERR_FAIL_COND_V(!A, RID());
+	ERR_FAIL_COND(!A);
 
 	Body2DSW *B = body_owner.getornull(p_body_b);
-	ERR_FAIL_COND_V(!B, RID());
+	ERR_FAIL_COND(!B);
+
+	Joint2DSW *prev_joint = joint_owner.getornull(p_joint);
+	ERR_FAIL_COND(prev_joint == nullptr);
 
 	Joint2DSW *joint = memnew(DampedSpringJoint2DSW(p_anchor_a, p_anchor_b, A, B));
-	RID self = joint_owner.make_rid(joint);
-	joint->set_self(self);
-	return self;
+
+	joint_owner.replace(p_joint, joint);
+	joint->copy_settings_from(prev_joint);
+	memdelete(prev_joint);
 }
 
 void PhysicsServer2DSW::pin_joint_set_param(RID p_joint, PinJointParam p_param, real_t p_value) {
 	Joint2DSW *j = joint_owner.getornull(p_joint);
 	ERR_FAIL_COND(!j);
-	ERR_FAIL_COND(j->get_type() != JOINT_PIN);
+	ERR_FAIL_COND(j->get_type() != JOINT_TYPE_PIN);
 
 	PinJoint2DSW *pin_joint = static_cast<PinJoint2DSW *>(j);
 	pin_joint->set_param(p_param, p_value);
@@ -1102,7 +1130,7 @@ void PhysicsServer2DSW::pin_joint_set_param(RID p_joint, PinJointParam p_param, 
 real_t PhysicsServer2DSW::pin_joint_get_param(RID p_joint, PinJointParam p_param) const {
 	Joint2DSW *j = joint_owner.getornull(p_joint);
 	ERR_FAIL_COND_V(!j, 0);
-	ERR_FAIL_COND_V(j->get_type() != JOINT_PIN, 0);
+	ERR_FAIL_COND_V(j->get_type() != JOINT_TYPE_PIN, 0);
 
 	PinJoint2DSW *pin_joint = static_cast<PinJoint2DSW *>(j);
 	return pin_joint->get_param(p_param);
@@ -1111,7 +1139,7 @@ real_t PhysicsServer2DSW::pin_joint_get_param(RID p_joint, PinJointParam p_param
 void PhysicsServer2DSW::damped_spring_joint_set_param(RID p_joint, DampedSpringParam p_param, real_t p_value) {
 	Joint2DSW *j = joint_owner.getornull(p_joint);
 	ERR_FAIL_COND(!j);
-	ERR_FAIL_COND(j->get_type() != JOINT_DAMPED_SPRING);
+	ERR_FAIL_COND(j->get_type() != JOINT_TYPE_DAMPED_SPRING);
 
 	DampedSpringJoint2DSW *dsj = static_cast<DampedSpringJoint2DSW *>(j);
 	dsj->set_param(p_param, p_value);
@@ -1120,7 +1148,7 @@ void PhysicsServer2DSW::damped_spring_joint_set_param(RID p_joint, DampedSpringP
 real_t PhysicsServer2DSW::damped_spring_joint_get_param(RID p_joint, DampedSpringParam p_param) const {
 	Joint2DSW *j = joint_owner.getornull(p_joint);
 	ERR_FAIL_COND_V(!j, 0);
-	ERR_FAIL_COND_V(j->get_type() != JOINT_DAMPED_SPRING, 0);
+	ERR_FAIL_COND_V(j->get_type() != JOINT_TYPE_DAMPED_SPRING, 0);
 
 	DampedSpringJoint2DSW *dsj = static_cast<DampedSpringJoint2DSW *>(j);
 	return dsj->get_param(p_param);
@@ -1128,7 +1156,7 @@ real_t PhysicsServer2DSW::damped_spring_joint_get_param(RID p_joint, DampedSprin
 
 PhysicsServer2D::JointType PhysicsServer2DSW::joint_get_type(RID p_joint) const {
 	Joint2DSW *joint = joint_owner.getornull(p_joint);
-	ERR_FAIL_COND_V(!joint, JOINT_PIN);
+	ERR_FAIL_COND_V(!joint, JOINT_TYPE_PIN);
 
 	return joint->get_type();
 }
@@ -1207,6 +1235,10 @@ void PhysicsServer2DSW::free(RID p_rid) {
 
 void PhysicsServer2DSW::set_active(bool p_active) {
 	active = p_active;
+};
+
+void PhysicsServer2DSW::set_collision_iterations(int p_iterations) {
+	iterations = p_iterations;
 };
 
 void PhysicsServer2DSW::init() {
@@ -1325,19 +1357,14 @@ int PhysicsServer2DSW::get_process_info(ProcessInfo p_info) {
 
 PhysicsServer2DSW *PhysicsServer2DSW::singletonsw = nullptr;
 
-PhysicsServer2DSW::PhysicsServer2DSW() {
+PhysicsServer2DSW::PhysicsServer2DSW(bool p_using_threads) {
 	singletonsw = this;
-	BroadPhase2DSW::create_func = BroadPhase2DHashGrid::_create;
-	//BroadPhase2DSW::create_func=BroadPhase2DBasic::_create;
+	BroadPhase2DSW::create_func = BroadPhase2DBVH::_create;
 
 	active = true;
 	island_count = 0;
 	active_objects = 0;
 	collision_pairs = 0;
-#ifdef NO_THREADS
-	using_threads = false;
-#else
-	using_threads = int(ProjectSettings::get_singleton()->get("physics/2d/thread_model")) == 2;
-#endif
+	using_threads = p_using_threads;
 	flushing_queries = false;
 };

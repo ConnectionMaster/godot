@@ -111,10 +111,10 @@ namespace Godot
         }
 
         /// <summary>
-        /// Returns the minimum angle to the given vector, in radians.
+        /// Returns the unsigned minimum angle to the given vector, in radians.
         /// </summary>
         /// <param name="to">The other vector to compare this vector to.</param>
-        /// <returns>The angle between the two vectors, in radians.</returns>
+        /// <returns>The unsigned angle between the two vectors, in radians.</returns>
         public real_t AngleTo(Vector3 to)
         {
             return Mathf.Atan2(Cross(to).Length(), Dot(to));
@@ -137,6 +137,24 @@ namespace Godot
         public Vector3 Ceil()
         {
             return new Vector3(Mathf.Ceil(x), Mathf.Ceil(y), Mathf.Ceil(z));
+        }
+
+        /// <summary>
+        /// Returns a new vector with all components clamped between the
+        /// components of `min` and `max` using
+        /// <see cref="Mathf.Clamp(real_t, real_t, real_t)"/>.
+        /// </summary>
+        /// <param name="min">The vector with minimum allowed values.</param>
+        /// <param name="max">The vector with maximum allowed values.</param>
+        /// <returns>The vector with all components clamped.</returns>
+        public Vector3 Clamp(Vector3 min, Vector3 max)
+        {
+            return new Vector3
+            (
+                Mathf.Clamp(x, min.x, max.x),
+                Mathf.Clamp(y, min.y, max.y),
+                Mathf.Clamp(z, min.z, max.z)
+            );
         }
 
         /// <summary>
@@ -313,6 +331,25 @@ namespace Godot
         }
 
         /// <summary>
+        /// Returns the vector with a maximum length by limiting its length to `length`.
+        /// </summary>
+        /// <param name="length">The length to limit to.</param>
+        /// <returns>The vector with its length limited.</returns>
+        public Vector3 LimitLength(real_t length = 1.0f)
+        {
+            Vector3 v = this;
+            real_t l = Length();
+
+            if (l > 0 && length < l)
+            {
+                v /= l;
+                v *= length;
+            }
+
+            return v;
+        }
+
+        /// <summary>
         /// Returns the axis of the vector's largest value. See <see cref="Axis"/>.
         /// If all components are equal, this method returns <see cref="Axis.X"/>.
         /// </summary>
@@ -419,7 +456,7 @@ namespace Godot
 #if DEBUG
             if (!normal.IsNormalized())
             {
-                throw new ArgumentException("Argument  is not normalized", nameof(normal));
+                throw new ArgumentException("Argument is not normalized", nameof(normal));
             }
 #endif
             return 2.0f * Dot(normal) * normal - this;
@@ -437,7 +474,7 @@ namespace Godot
 #if DEBUG
             if (!axis.IsNormalized())
             {
-                throw new ArgumentException("Argument  is not normalized", nameof(axis));
+                throw new ArgumentException("Argument is not normalized", nameof(axis));
             }
 #endif
             return new Basis(axis, phi).Xform(this);
@@ -466,6 +503,23 @@ namespace Godot
             v.y = Mathf.Sign(y);
             v.z = Mathf.Sign(z);
             return v;
+        }
+
+        /// <summary>
+        /// Returns the signed angle to the given vector, in radians.
+        /// The sign of the angle is positive in a counter-clockwise
+        /// direction and negative in a clockwise direction when viewed
+        /// from the side specified by the `axis`.
+        /// </summary>
+        /// <param name="to">The other vector to compare this vector to.</param>
+        /// <param name="axis">The reference axis to use for the angle sign.</param>
+        /// <returns>The signed angle between the two vectors, in radians.</returns>
+        public real_t SignedAngleTo(Vector3 to, Vector3 axis)
+        {
+            Vector3 crossTo = Cross(to);
+            real_t unsignedAngle = Mathf.Atan2(crossTo.Length(), Dot(to));
+            real_t sign = crossTo.Dot(axis);
+            return (sign < 0) ? -unsignedAngle : unsignedAngle;
         }
 
         /// <summary>

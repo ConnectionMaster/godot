@@ -299,17 +299,17 @@ void EditorVisualProfiler::_update_plot() {
 	}
 
 	Ref<Image> img;
-	img.instance();
+	img.instantiate();
 	img->create(w, h, false, Image::FORMAT_RGBA8, graph_image);
 
 	if (reset_texture) {
 		if (graph_texture.is_null()) {
-			graph_texture.instance();
+			graph_texture.instantiate();
 		}
 		graph_texture->create_from_image(img);
 	}
 
-	graph_texture->update(img, true);
+	graph_texture->update(img);
 
 	graph->set_texture(graph_texture);
 	graph->update();
@@ -517,7 +517,7 @@ void EditorVisualProfiler::_graph_tex_input(const Ref<InputEvent> &p_ev) {
 	Ref<InputEventMouseMotion> mm = p_ev;
 
 	if (
-			(mb.is_valid() && mb->get_button_index() == BUTTON_LEFT && mb->is_pressed()) ||
+			(mb.is_valid() && mb->get_button_index() == MOUSE_BUTTON_LEFT && mb->is_pressed()) ||
 			(mm.is_valid())) {
 		int half_w = graph->get_size().width / 2;
 		int x = me->get_position().x;
@@ -549,7 +549,7 @@ void EditorVisualProfiler::_graph_tex_input(const Ref<InputEvent> &p_ev) {
 			hover_metric = -1;
 		}
 
-		if (mb.is_valid() || mm->get_button_mask() & BUTTON_MASK_LEFT) {
+		if (mb.is_valid() || mm->get_button_mask() & MOUSE_BUTTON_MASK_LEFT) {
 			//cursor_metric=x;
 			updating_frame = true;
 
@@ -773,13 +773,16 @@ EditorVisualProfiler::EditorVisualProfiler() {
 	variables->set_column_titles_visible(true);
 	variables->set_column_title(0, TTR("Name"));
 	variables->set_column_expand(0, true);
-	variables->set_column_min_width(0, 60);
+	variables->set_column_clip_content(0, true);
+	variables->set_column_custom_minimum_width(0, 60);
 	variables->set_column_title(1, TTR("CPU"));
 	variables->set_column_expand(1, false);
-	variables->set_column_min_width(1, 60 * EDSCALE);
+	variables->set_column_clip_content(1, true);
+	variables->set_column_custom_minimum_width(1, 60 * EDSCALE);
 	variables->set_column_title(2, TTR("GPU"));
 	variables->set_column_expand(2, false);
-	variables->set_column_min_width(2, 60 * EDSCALE);
+	variables->set_column_clip_content(2, true);
+	variables->set_column_custom_minimum_width(2, 60 * EDSCALE);
 	variables->connect("cell_selected", callable_mp(this, &EditorVisualProfiler::_item_selected));
 
 	graph = memnew(TextureRect);

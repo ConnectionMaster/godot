@@ -65,7 +65,7 @@ EditorDebuggerNode::EditorDebuggerNode() {
 	add_child(tabs);
 
 	Ref<StyleBoxEmpty> empty;
-	empty.instance();
+	empty.instantiate();
 	tabs->add_theme_style_override("panel", empty);
 
 	auto_switch_remote_scene_tree = EDITOR_DEF("debugger/auto_switch_to_remote_scene_tree", false);
@@ -209,7 +209,7 @@ void EditorDebuggerNode::stop() {
 	// Also close all debugging sessions.
 	_for_all(tabs, [&](ScriptEditorDebugger *dbg) {
 		if (dbg->is_session_active()) {
-			dbg->stop();
+			dbg->_stop_and_notify();
 		}
 	});
 	_break_state_changed();

@@ -35,6 +35,8 @@
 #include "core/debugger/remote_debugger.h"
 #include "core/io/marshalls.h"
 #include "core/string/ustring.h"
+#include "core/version.h"
+#include "core/version_hash.gen.h"
 #include "editor/debugger/editor_network_profiler.h"
 #include "editor/debugger/editor_performance_profiler.h"
 #include "editor/debugger/editor_profiler.h"
@@ -218,7 +220,7 @@ void ScriptEditorDebugger::_file_selected(const String &p_file) {
 			file->store_csv_line(headers);
 
 			if (vmem_tree->get_root()) {
-				TreeItem *ti = vmem_tree->get_root()->get_children();
+				TreeItem *ti = vmem_tree->get_root()->get_first_child();
 				while (ti) {
 					Vector<String> values;
 					values.resize(vmem_tree->get_columns());
@@ -343,7 +345,7 @@ void ScriptEditorDebugger::_parse_message(const String &p_msg, const Array &p_da
 		DebuggerMarshalls::ResourceUsage usage;
 		usage.deserialize(p_data);
 
-		int total = 0;
+		uint64_t total = 0;
 
 		for (List<DebuggerMarshalls::ResourceInfo>::Element *E = usage.infos.front(); E; E = E->next()) {
 			TreeItem *it = vmem_tree->create_item(root);
@@ -1317,7 +1319,7 @@ bool ScriptEditorDebugger::is_skip_breakpoints() {
 void ScriptEditorDebugger::_error_activated() {
 	TreeItem *selected = error_tree->get_selected();
 
-	TreeItem *ci = selected->get_children();
+	TreeItem *ci = selected->get_first_child();
 	if (ci) {
 		selected->set_collapsed(!selected->is_collapsed());
 	}
@@ -1339,7 +1341,7 @@ void ScriptEditorDebugger::_expand_errors_list() {
 		return;
 	}
 
-	TreeItem *item = root->get_children();
+	TreeItem *item = root->get_first_child();
 	while (item) {
 		item->set_collapsed(false);
 		item = item->get_next();
@@ -1352,7 +1354,7 @@ void ScriptEditorDebugger::_collapse_errors_list() {
 		return;
 	}
 
-	TreeItem *item = root->get_children();
+	TreeItem *item = root->get_first_child();
 	while (item) {
 		item->set_collapsed(true);
 		item = item->get_next();
@@ -1371,7 +1373,8 @@ void ScriptEditorDebugger::_error_tree_item_rmb_selected(const Vector2 &p_pos) {
 	item_menu->set_size(Size2(1, 1));
 
 	if (error_tree->is_anything_selected()) {
-		item_menu->add_icon_item(get_theme_icon("ActionCopy", "EditorIcons"), TTR("Copy Error"), 0);
+		item_menu->add_icon_item(get_theme_icon("ActionCopy", "EditorIcons"), TTR("Copy Error"), ACTION_COPY_ERROR);
+		item_menu->add_icon_item(get_theme_icon("Instance", "EditorIcons"), TTR("Open C++ Source on GitHub"), ACTION_OPEN_SOURCE);
 	}
 
 	if (item_menu->get_item_count() > 0) {
@@ -1381,30 +1384,64 @@ void ScriptEditorDebugger::_error_tree_item_rmb_selected(const Vector2 &p_pos) {
 }
 
 void ScriptEditorDebugger::_item_menu_id_pressed(int p_option) {
-	TreeItem *ti = error_tree->get_selected();
-	while (ti->get_parent() != error_tree->get_root()) {
-		ti = ti->get_parent();
+	switch (p_option) {
+		case ACTION_COPY_ERROR: {
+			TreeItem *ti = error_tree->get_selected();
+			while (ti->get_parent() != error_tree->get_root()) {
+				ti = ti->get_parent();
+			}
+
+			String type;
+
+			if (ti->get_icon(0) == get_theme_icon("Warning", "EditorIcons")) {
+				type = "W ";
+			} else if (ti->get_icon(0) == get_theme_icon("Error", "EditorIcons")) {
+				type = "E ";
+			}
+
+			String text = ti->get_text(0) + "   ";
+			int rpad_len = text.length();
+
+			text = type + text + ti->get_text(1) + "\n";
+			TreeItem *ci = ti->get_first_child();
+			while (ci) {
+				text += "  " + ci->get_text(0).rpad(rpad_len) + ci->get_text(1) + "\n";
+				ci = ci->get_next();
+			}
+
+			DisplayServer::get_singleton()->clipboard_set(text);
+		} break;
+
+		case ACTION_OPEN_SOURCE: {
+			TreeItem *ti = error_tree->get_selected();
+			while (ti->get_parent() != error_tree->get_root()) {
+				ti = ti->get_parent();
+			}
+
+			// We only need the first child here (C++ source stack trace).
+			TreeItem *ci = ti->get_first_child();
+			// Parse back the `file:line @ method()` string.
+			const Vector<String> file_line_number = ci->get_text(1).split("@")[0].strip_edges().split(":");
+			ERR_FAIL_COND_MSG(file_line_number.size() < 2, "Incorrect C++ source stack trace file:line format (please report).");
+			const String file = file_line_number[0];
+			const int line_number = file_line_number[1].to_int();
+
+			// Construct a GitHub repository URL and open it in the user's default web browser.
+			if (String(VERSION_HASH).length() >= 1) {
+				// Git commit hash information available; use it for greater accuracy, including for development versions.
+				OS::get_singleton()->shell_open(vformat("https://github.com/godotengine/godot/blob/%s/%s#L%d",
+						VERSION_HASH,
+						file,
+						line_number));
+			} else {
+				// Git commit hash information unavailable; fall back to tagged releases.
+				OS::get_singleton()->shell_open(vformat("https://github.com/godotengine/godot/blob/%s-stable/%s#L%d",
+						VERSION_NUMBER,
+						file,
+						line_number));
+			}
+		} break;
 	}
-
-	String type;
-
-	if (ti->get_icon(0) == get_theme_icon("Warning", "EditorIcons")) {
-		type = "W ";
-	} else if (ti->get_icon(0) == get_theme_icon("Error", "EditorIcons")) {
-		type = "E ";
-	}
-
-	String text = ti->get_text(0) + "   ";
-	int rpad_len = text.length();
-
-	text = type + text + ti->get_text(1) + "\n";
-	TreeItem *ci = ti->get_children();
-	while (ci) {
-		text += "  " + ci->get_text(0).rpad(rpad_len) + ci->get_text(1) + "\n";
-		ci = ci->get_next();
-	}
-
-	DisplayServer::get_singleton()->clipboard_set(text);
 }
 
 void ScriptEditorDebugger::_tab_changed(int p_tab) {
@@ -1498,7 +1535,7 @@ ScriptEditorDebugger::ScriptEditorDebugger(EditorNode *p_editor) {
 		reason->set_text("");
 		hbc->add_child(reason);
 		reason->set_h_size_flags(SIZE_EXPAND_FILL);
-		reason->set_autowrap(true);
+		reason->set_autowrap_mode(Label::AUTOWRAP_WORD_SMART);
 		reason->set_max_lines_visible(3);
 		reason->set_mouse_filter(Control::MOUSE_FILTER_PASS);
 
@@ -1606,9 +1643,11 @@ ScriptEditorDebugger::ScriptEditorDebugger(EditorNode *p_editor) {
 		error_tree->set_columns(2);
 
 		error_tree->set_column_expand(0, false);
-		error_tree->set_column_min_width(0, 140);
+		error_tree->set_column_custom_minimum_width(0, 140);
+		error_tree->set_column_clip_content(0, true);
 
 		error_tree->set_column_expand(1, true);
+		error_tree->set_column_clip_content(1, true);
 
 		error_tree->set_select_mode(Tree::SELECT_ROW);
 		error_tree->set_hide_root(true);
@@ -1661,6 +1700,8 @@ ScriptEditorDebugger::ScriptEditorDebugger(EditorNode *p_editor) {
 		VBoxContainer *vmem_vb = memnew(VBoxContainer);
 		HBoxContainer *vmem_hb = memnew(HBoxContainer);
 		Label *vmlb = memnew(Label(TTR("List of Video Memory Usage by Resource:") + " "));
+		vmlb->set_theme_type_variation("HeaderSmall");
+
 		vmlb->set_h_size_flags(SIZE_EXPAND_FILL);
 		vmem_hb->add_child(vmlb);
 		vmem_hb->add_child(memnew(Label(TTR("Total:") + " ")));
@@ -1694,13 +1735,13 @@ ScriptEditorDebugger::ScriptEditorDebugger(EditorNode *p_editor) {
 		vmem_tree->set_column_expand(0, true);
 		vmem_tree->set_column_expand(1, false);
 		vmem_tree->set_column_title(1, TTR("Type"));
-		vmem_tree->set_column_min_width(1, 100 * EDSCALE);
+		vmem_tree->set_column_custom_minimum_width(1, 100 * EDSCALE);
 		vmem_tree->set_column_expand(2, false);
 		vmem_tree->set_column_title(2, TTR("Format"));
-		vmem_tree->set_column_min_width(2, 150 * EDSCALE);
+		vmem_tree->set_column_custom_minimum_width(2, 150 * EDSCALE);
 		vmem_tree->set_column_expand(3, false);
 		vmem_tree->set_column_title(3, TTR("Usage"));
-		vmem_tree->set_column_min_width(3, 80 * EDSCALE);
+		vmem_tree->set_column_custom_minimum_width(3, 80 * EDSCALE);
 		vmem_tree->set_hide_root(true);
 
 		tabs->add_child(vmem_vb);

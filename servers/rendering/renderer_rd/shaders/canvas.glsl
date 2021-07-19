@@ -2,7 +2,7 @@
 
 #version 450
 
-VERSION_DEFINES
+#VERSION_DEFINES
 
 #ifdef USE_ATTRIBUTES
 layout(location = 0) in vec2 vertex_attrib;
@@ -26,17 +26,15 @@ layout(location = 3) out vec2 pixel_size_interp;
 
 #endif
 
-#ifdef USE_MATERIAL_UNIFORMS
+#ifdef MATERIAL_UNIFORMS_USED
 layout(set = 1, binding = 0, std140) uniform MaterialUniforms{
-	/* clang-format off */
-MATERIAL_UNIFORMS
-	/* clang-format on */
+
+#MATERIAL_UNIFORMS
+
 } material;
 #endif
 
-/* clang-format off */
-VERTEX_SHADER_GLOBALS
-/* clang-format on */
+#GLOBALS
 
 void main() {
 	vec4 instance_custom = vec4(0.0);
@@ -67,7 +65,7 @@ void main() {
 #elif defined(USE_ATTRIBUTES)
 
 	vec2 vertex = vertex_attrib;
-	vec4 color = color_attrib;
+	vec4 color = color_attrib * draw_data.modulation;
 	vec2 uv = uv_attrib;
 
 	uvec4 bones = bone_attrib;
@@ -86,40 +84,82 @@ void main() {
 
 	mat4 world_matrix = mat4(vec4(draw_data.world_x, 0.0, 0.0), vec4(draw_data.world_y, 0.0, 0.0), vec4(0.0, 0.0, 1.0, 0.0), vec4(draw_data.world_ofs, 0.0, 1.0));
 
-#if 0
-	if (draw_data.flags & FLAGS_INSTANCING_ENABLED) {
-		uint offset = draw_data.flags & FLAGS_INSTANCING_STRIDE_MASK;
-		offset *= gl_InstanceIndex;
-		mat4 instance_xform = mat4(
-				vec4(texelFetch(instancing_buffer, offset + 0), texelFetch(instancing_buffer, offset + 1), 0.0, texelFetch(instancing_buffer, offset + 3)),
-				vec4(texelFetch(instancing_buffer, offset + 4), texelFetch(instancing_buffer, offset + 5), 0.0, texelFetch(instancing_buffer, offset + 7)),
-				vec4(0.0, 0.0, 1.0, 0.0),
-				vec4(0.0, 0.0, 0.0, 1.0));
-		offset += 8;
-		if (draw_data.flags & FLAGS_INSTANCING_HAS_COLORS) {
-			vec4 instance_color;
-			if (draw_data.flags & FLAGS_INSTANCING_COLOR_8_BIT) {
-				uint bits = floatBitsToUint(texelFetch(instancing_buffer, offset));
-				instance_color = unpackUnorm4x8(bits);
-				offset += 1;
-			} else {
-				instance_color = vec4(texelFetch(instancing_buffer, offset + 0), texelFetch(instancing_buffer, offset + 1), texelFetch(instancing_buffer, offset + 2), texelFetch(instancing_buffer, offset + 3));
-				offset += 4;
-			}
+#define FLAGS_INSTANCING_MASK 0x7F
+#define FLAGS_INSTANCING_HAS_COLORS (1 << 7)
+#define FLAGS_INSTANCING_HAS_CUSTOM_DATA (1 << 8)
 
-			color *= instance_color;
+	uint instancing = draw_data.flags & FLAGS_INSTANCING_MASK;
+
+#ifdef USE_ATTRIBUTES
+
+	if (instancing > 1) {
+		// trails
+
+		uint stride = 2 + 1 + 1; //particles always uses this format
+
+		uint trail_size = instancing;
+
+		uint offset = trail_size * stride * gl_InstanceIndex;
+
+		vec4 pcolor;
+		vec2 new_vertex;
+		{
+			uint boffset = offset + bone_attrib.x * stride;
+			new_vertex = (vec4(vertex, 0.0, 1.0) * mat4(transforms.data[boffset + 0], transforms.data[boffset + 1], vec4(0.0, 0.0, 1.0, 0.0), vec4(0.0, 0.0, 0.0, 1.0))).xy * weight_attrib.x;
+			pcolor = transforms.data[boffset + 2] * weight_attrib.x;
 		}
-		if (draw_data.flags & FLAGS_INSTANCING_HAS_CUSTOM_DATA) {
-			if (draw_data.flags & FLAGS_INSTANCING_CUSTOM_DATA_8_BIT) {
-				uint bits = floatBitsToUint(texelFetch(instancing_buffer, offset));
-				instance_custom = unpackUnorm4x8(bits);
-			} else {
-				instance_custom = vec4(texelFetch(instancing_buffer, offset + 0), texelFetch(instancing_buffer, offset + 1), texelFetch(instancing_buffer, offset + 2), texelFetch(instancing_buffer, offset + 3));
+		if (weight_attrib.y > 0.001) {
+			uint boffset = offset + bone_attrib.y * stride;
+			new_vertex += (vec4(vertex, 0.0, 1.0) * mat4(transforms.data[boffset + 0], transforms.data[boffset + 1], vec4(0.0, 0.0, 1.0, 0.0), vec4(0.0, 0.0, 0.0, 1.0))).xy * weight_attrib.y;
+			pcolor += transforms.data[boffset + 2] * weight_attrib.y;
+		}
+		if (weight_attrib.z > 0.001) {
+			uint boffset = offset + bone_attrib.z * stride;
+			new_vertex += (vec4(vertex, 0.0, 1.0) * mat4(transforms.data[boffset + 0], transforms.data[boffset + 1], vec4(0.0, 0.0, 1.0, 0.0), vec4(0.0, 0.0, 0.0, 1.0))).xy * weight_attrib.z;
+			pcolor += transforms.data[boffset + 2] * weight_attrib.z;
+		}
+		if (weight_attrib.w > 0.001) {
+			uint boffset = offset + bone_attrib.w * stride;
+			new_vertex += (vec4(vertex, 0.0, 1.0) * mat4(transforms.data[boffset + 0], transforms.data[boffset + 1], vec4(0.0, 0.0, 1.0, 0.0), vec4(0.0, 0.0, 0.0, 1.0))).xy * weight_attrib.w;
+			pcolor += transforms.data[boffset + 2] * weight_attrib.w;
+		}
+
+		instance_custom = transforms.data[offset + 3];
+
+		vertex = new_vertex;
+		color *= pcolor;
+
+	} else
+#endif // USE_ATTRIBUTES
+
+			if (instancing == 1) {
+		uint stride = 2;
+		{
+			if (bool(draw_data.flags & FLAGS_INSTANCING_HAS_COLORS)) {
+				stride += 1;
+			}
+			if (bool(draw_data.flags & FLAGS_INSTANCING_HAS_CUSTOM_DATA)) {
+				stride += 1;
 			}
 		}
+
+		uint offset = stride * gl_InstanceIndex;
+
+		mat4 matrix = mat4(transforms.data[offset + 0], transforms.data[offset + 1], vec4(0.0, 0.0, 1.0, 0.0), vec4(0.0, 0.0, 0.0, 1.0));
+		offset += 2;
+
+		if (bool(draw_data.flags & FLAGS_INSTANCING_HAS_COLORS)) {
+			color *= transforms.data[offset];
+			offset += 1;
+		}
+
+		if (bool(draw_data.flags & FLAGS_INSTANCING_HAS_CUSTOM_DATA)) {
+			instance_custom = transforms.data[offset];
+		}
+
+		matrix = transpose(matrix);
+		world_matrix = world_matrix * matrix;
 	}
-
-#endif
 
 #if !defined(USE_ATTRIBUTES) && !defined(USE_PRIMITIVE)
 	if (bool(draw_data.flags & FLAGS_USING_PARTICLES)) {
@@ -132,9 +172,7 @@ void main() {
 	float point_size = 1.0;
 #endif
 	{
-		/* clang-format off */
-VERTEX_SHADER_CODE
-		/* clang-format on */
+#CODE : VERTEX
 	}
 
 #ifdef USE_NINEPATCH
@@ -212,7 +250,7 @@ VERTEX_SHADER_CODE
 
 #version 450
 
-VERSION_DEFINES
+#VERSION_DEFINES
 
 #include "canvas_uniforms_inc.glsl"
 
@@ -228,11 +266,11 @@ layout(location = 3) in vec2 pixel_size_interp;
 
 layout(location = 0) out vec4 frag_color;
 
-#ifdef USE_MATERIAL_UNIFORMS
+#ifdef MATERIAL_UNIFORMS_USED
 layout(set = 1, binding = 0, std140) uniform MaterialUniforms{
-	/* clang-format off */
-MATERIAL_UNIFORMS
-	/* clang-format on */
+
+#MATERIAL_UNIFORMS
+
 } material;
 #endif
 
@@ -243,7 +281,7 @@ vec2 screen_uv_to_sdf(vec2 p_uv) {
 float texture_sdf(vec2 p_sdf) {
 	vec2 uv = p_sdf * canvas_data.sdf_to_tex.xy + canvas_data.sdf_to_tex.zw;
 	float d = texture(sampler2D(sdf_texture, material_samplers[SAMPLER_LINEAR_CLAMP]), uv).r;
-	d = d * SDF_MAX_LENGTH - 1.0;
+	d *= SDF_MAX_LENGTH;
 	return d * canvas_data.tex_to_sdf;
 }
 
@@ -260,11 +298,9 @@ vec2 sdf_to_screen_uv(vec2 p_sdf) {
 	return p_sdf * canvas_data.sdf_to_screen;
 }
 
-/* clang-format off */
-FRAGMENT_SHADER_GLOBALS
-/* clang-format on */
+#GLOBALS
 
-#ifdef LIGHT_SHADER_CODE_USED
+#ifdef LIGHT_CODE_USED
 
 vec4 light_compute(
 		vec3 light_vertex,
@@ -278,9 +314,9 @@ vec4 light_compute(
 		vec2 uv,
 		vec4 color, bool is_directional) {
 	vec4 light = vec4(0.0);
-	/* clang-format off */
-LIGHT_SHADER_CODE
-	/* clang-format on */
+
+#CODE : LIGHT
+
 	return light;
 }
 
@@ -356,7 +392,7 @@ vec3 light_normal_compute(vec3 light_vec, vec3 normal, vec3 base_color, vec3 lig
 
 //float distance = length(shadow_pos);
 vec4 light_shadow_compute(uint light_base, vec4 light_color, vec4 shadow_uv
-#ifdef LIGHT_SHADER_CODE_USED
+#ifdef LIGHT_CODE_USED
 		,
 		vec3 shadow_modulate
 #endif
@@ -395,7 +431,7 @@ vec4 light_shadow_compute(uint light_base, vec4 light_color, vec4 shadow_uv
 	}
 
 	vec4 shadow_color = unpackUnorm4x8(light_array.data[light_base].shadow_color);
-#ifdef LIGHT_SHADER_CODE_USED
+#ifdef LIGHT_CODE_USED
 	shadow_color.rgb *= shadow_modulate;
 #endif
 
@@ -504,11 +540,7 @@ void main() {
 		normal_used = true;
 #endif
 
-		/* clang-format off */
-
-FRAGMENT_SHADER_CODE
-
-		/* clang-format on */
+#CODE : FRAGMENT
 
 #if defined(NORMAL_MAP_USED)
 		normal = mix(vec3(0.0, 0.0, 1.0), normal_map * vec3(2.0, -2.0, 1.0) - vec3(1.0, -1.0, 0.0), normal_map_depth);
@@ -543,7 +575,7 @@ FRAGMENT_SHADER_CODE
 		vec2 direction = light_array.data[light_base].position;
 		vec4 light_color = light_array.data[light_base].color;
 
-#ifdef LIGHT_SHADER_CODE_USED
+#ifdef LIGHT_CODE_USED
 
 		vec4 shadow_modulate = vec4(1.0);
 		light_color = light_compute(light_vertex, vec3(direction, light_array.data[light_base].height), normal, light_color, light_color.a, specular_shininess, shadow_modulate, screen_uv, uv, color, true);
@@ -561,7 +593,7 @@ FRAGMENT_SHADER_CODE
 			vec4 shadow_uv = vec4(shadow_pos.x, light_array.data[light_base].shadow_y_ofs, shadow_pos.y * light_array.data[light_base].shadow_zfar_inv, 1.0);
 
 			light_color = light_shadow_compute(light_base, light_color, shadow_uv
-#ifdef LIGHT_SHADER_CODE_USED
+#ifdef LIGHT_CODE_USED
 					,
 					shadow_modulate.rgb
 #endif
@@ -599,7 +631,7 @@ FRAGMENT_SHADER_CODE
 		vec4 light_color = textureLod(sampler2D(atlas_texture, texture_sampler), tex_uv_atlas, 0.0);
 		vec4 light_base_color = light_array.data[light_base].color;
 
-#ifdef LIGHT_SHADER_CODE_USED
+#ifdef LIGHT_CODE_USED
 
 		vec4 shadow_modulate = vec4(1.0);
 		vec3 light_position = vec3(light_array.data[light_base].position, light_array.data[light_base].height);
@@ -657,7 +689,7 @@ FRAGMENT_SHADER_CODE
 			vec4 shadow_uv = vec4(tex_ofs, light_array.data[light_base].shadow_y_ofs, distance, 1.0);
 
 			light_color = light_shadow_compute(light_base, light_color, shadow_uv
-#ifdef LIGHT_SHADER_CODE_USED
+#ifdef LIGHT_CODE_USED
 					,
 					shadow_modulate.rgb
 #endif

@@ -107,7 +107,7 @@ Ref<WebSocketPeer> EMWSClient::get_peer(int p_peer_id) const {
 	return _peer;
 }
 
-NetworkedMultiplayerPeer::ConnectionStatus EMWSClient::get_connection_status() const {
+MultiplayerPeer::ConnectionStatus EMWSClient::get_connection_status() const {
 	if (_peer->is_connected_to_host()) {
 		if (_is_connecting)
 			return CONNECTION_CONNECTING;
@@ -121,8 +121,8 @@ void EMWSClient::disconnect_from_host(int p_code, String p_reason) {
 	_peer->close(p_code, p_reason);
 }
 
-IP_Address EMWSClient::get_connected_host() const {
-	ERR_FAIL_V_MSG(IP_Address(), "Not supported in HTML5 export.");
+IPAddress EMWSClient::get_connected_host() const {
+	ERR_FAIL_V_MSG(IPAddress(), "Not supported in HTML5 export.");
 }
 
 uint16_t EMWSClient::get_connected_port() const {
@@ -140,11 +140,7 @@ Error EMWSClient::set_buffers(int p_in_buffer, int p_in_packets, int p_out_buffe
 }
 
 EMWSClient::EMWSClient() {
-	_in_buf_size = DEF_BUF_SHIFT;
-	_in_pkt_size = DEF_PKT_SHIFT;
-	_is_connecting = false;
 	_peer = Ref<EMWSPeer>(memnew(EMWSPeer));
-	_js_id = 0;
 }
 
 EMWSClient::~EMWSClient() {

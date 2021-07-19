@@ -79,7 +79,7 @@ void AnimationNodeBlendSpace2DEditor::_blend_space_gui_input(const Ref<InputEven
 
 	Ref<InputEventMouseButton> mb = p_event;
 
-	if (mb.is_valid() && mb->is_pressed() && ((tool_select->is_pressed() && mb->get_button_index() == BUTTON_RIGHT) || (mb->get_button_index() == BUTTON_LEFT && tool_create->is_pressed()))) {
+	if (mb.is_valid() && mb->is_pressed() && ((tool_select->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_RIGHT) || (mb->get_button_index() == MOUSE_BUTTON_LEFT && tool_create->is_pressed()))) {
 		menu->clear();
 		animations_menu->clear();
 		animations_to_add.clear();
@@ -134,7 +134,7 @@ void AnimationNodeBlendSpace2DEditor::_blend_space_gui_input(const Ref<InputEven
 		}
 	}
 
-	if (mb.is_valid() && mb->is_pressed() && tool_select->is_pressed() && mb->get_button_index() == BUTTON_LEFT) {
+	if (mb.is_valid() && mb->is_pressed() && tool_select->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
 		blend_space_draw->update(); //update anyway
 		//try to see if a point can be selected
 		selected_point = -1;
@@ -174,7 +174,7 @@ void AnimationNodeBlendSpace2DEditor::_blend_space_gui_input(const Ref<InputEven
 		}
 	}
 
-	if (mb.is_valid() && mb->is_pressed() && tool_triangle->is_pressed() && mb->get_button_index() == BUTTON_LEFT) {
+	if (mb.is_valid() && mb->is_pressed() && tool_triangle->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
 		blend_space_draw->update(); //update anyway
 		//try to see if a point can be selected
 		selected_point = -1;
@@ -209,7 +209,7 @@ void AnimationNodeBlendSpace2DEditor::_blend_space_gui_input(const Ref<InputEven
 		}
 	}
 
-	if (mb.is_valid() && !mb->is_pressed() && dragging_selected_attempt && mb->get_button_index() == BUTTON_LEFT) {
+	if (mb.is_valid() && !mb->is_pressed() && dragging_selected_attempt && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
 		if (dragging_selected) {
 			//move
 			Vector2 point = blend_space->get_blend_point_position(selected_point);
@@ -236,7 +236,7 @@ void AnimationNodeBlendSpace2DEditor::_blend_space_gui_input(const Ref<InputEven
 		blend_space_draw->update();
 	}
 
-	if (mb.is_valid() && mb->is_pressed() && tool_blend->is_pressed() && mb->get_button_index() == BUTTON_LEFT) {
+	if (mb.is_valid() && mb->is_pressed() && tool_blend->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
 		Vector2 blend_pos = (mb->get_position() / blend_space_draw->get_size());
 		blend_pos.y = 1.0 - blend_pos.y;
 		blend_pos *= (blend_space->get_max_space() - blend_space->get_min_space());
@@ -270,7 +270,7 @@ void AnimationNodeBlendSpace2DEditor::_blend_space_gui_input(const Ref<InputEven
 		blend_space_draw->update();
 	}
 
-	if (mm.is_valid() && tool_blend->is_pressed() && mm->get_button_mask() & BUTTON_MASK_LEFT) {
+	if (mm.is_valid() && tool_blend->is_pressed() && mm->get_button_mask() & MOUSE_BUTTON_MASK_LEFT) {
 		Vector2 blend_pos = (mm->get_position() / blend_space_draw->get_size());
 		blend_pos.y = 1.0 - blend_pos.y;
 		blend_pos *= (blend_space->get_max_space() - blend_space->get_min_space());
@@ -308,7 +308,7 @@ void AnimationNodeBlendSpace2DEditor::_add_menu_type(int p_index) {
 	} else {
 		String type = menu->get_item_metadata(p_index);
 
-		Object *obj = ClassDB::instance(type);
+		Object *obj = ClassDB::instantiate(type);
 		ERR_FAIL_COND(!obj);
 		AnimationNode *an = Object::cast_to<AnimationNode>(obj);
 		ERR_FAIL_COND(!an);
@@ -335,7 +335,7 @@ void AnimationNodeBlendSpace2DEditor::_add_menu_type(int p_index) {
 
 void AnimationNodeBlendSpace2DEditor::_add_animation_type(int p_index) {
 	Ref<AnimationNodeAnimation> anim;
-	anim.instance();
+	anim.instantiate();
 
 	anim->set_animation(animations_to_add[p_index]);
 
@@ -818,7 +818,7 @@ AnimationNodeBlendSpace2DEditor::AnimationNodeBlendSpace2DEditor() {
 	add_child(top_hb);
 
 	Ref<ButtonGroup> bg;
-	bg.instance();
+	bg.instantiate();
 
 	tool_blend = memnew(Button);
 	tool_blend->set_flat(true);
@@ -942,7 +942,7 @@ AnimationNodeBlendSpace2DEditor::AnimationNodeBlendSpace2DEditor() {
 		left_vbox->add_spacer();
 		label_y = memnew(LineEdit);
 		left_vbox->add_child(label_y);
-		label_y->set_expand_to_text_length(true);
+		label_y->set_expand_to_text_length_enabled(true);
 		left_vbox->add_spacer();
 		min_y_value = memnew(SpinBox);
 		left_vbox->add_child(min_y_value);
@@ -978,7 +978,7 @@ AnimationNodeBlendSpace2DEditor::AnimationNodeBlendSpace2DEditor() {
 		bottom_vbox->add_spacer();
 		label_x = memnew(LineEdit);
 		bottom_vbox->add_child(label_x);
-		label_x->set_expand_to_text_length(true);
+		label_x->set_expand_to_text_length_enabled(true);
 		bottom_vbox->add_spacer();
 		max_x_value = memnew(SpinBox);
 		bottom_vbox->add_child(max_x_value);

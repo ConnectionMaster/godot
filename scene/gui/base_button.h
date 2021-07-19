@@ -45,21 +45,21 @@ public:
 	};
 
 private:
-	int button_mask;
-	bool toggle_mode;
-	bool shortcut_in_tooltip;
-	bool keep_pressed_outside;
+	int button_mask = MOUSE_BUTTON_MASK_LEFT;
+	bool toggle_mode = false;
+	bool shortcut_in_tooltip = true;
+	bool keep_pressed_outside = false;
 	Ref<Shortcut> shortcut;
 	ObjectID shortcut_context;
 
-	ActionMode action_mode;
+	ActionMode action_mode = ACTION_MODE_BUTTON_RELEASE;
 	struct Status {
-		bool pressed;
-		bool hovering;
-		bool press_attempt;
-		bool pressing_inside;
+		bool pressed = false;
+		bool hovering = false;
+		bool press_attempt = false;
+		bool pressing_inside = false;
 
-		bool disabled;
+		bool disabled = false;
 
 	} status;
 
@@ -98,7 +98,8 @@ public:
 	bool is_pressing() const; ///< return whether button is pressed (toggled in)
 	bool is_hovered() const;
 
-	void set_pressed(bool p_pressed); ///only works in toggle mode
+	void set_pressed(bool p_pressed); // Only works in toggle mode.
+	void set_pressed_no_signal(bool p_pressed);
 	void set_toggle_mode(bool p_on);
 	bool is_toggle_mode() const;
 

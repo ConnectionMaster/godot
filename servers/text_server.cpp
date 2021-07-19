@@ -219,6 +219,11 @@ void TextServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("create_font_system", "name", "base_size"), &TextServer::create_font_system, DEFVAL(16));
 	ClassDB::bind_method(D_METHOD("create_font_resource", "filename", "base_size"), &TextServer::create_font_resource, DEFVAL(16));
 	ClassDB::bind_method(D_METHOD("create_font_memory", "data", "type", "base_size"), &TextServer::_create_font_memory, DEFVAL(16));
+	ClassDB::bind_method(D_METHOD("create_font_bitmap", "height", "ascent", "base_size"), &TextServer::create_font_bitmap);
+
+	ClassDB::bind_method(D_METHOD("font_bitmap_add_texture", "font", "texture"), &TextServer::font_bitmap_add_texture);
+	ClassDB::bind_method(D_METHOD("font_bitmap_add_char", "font", "char", "texture_idx", "rect", "align", "advance"), &TextServer::font_bitmap_add_char);
+	ClassDB::bind_method(D_METHOD("font_bitmap_add_kerning_pair", "font", "A", "B", "kerning"), &TextServer::font_bitmap_add_kerning_pair);
 
 	ClassDB::bind_method(D_METHOD("font_get_height", "font", "size"), &TextServer::font_get_height);
 	ClassDB::bind_method(D_METHOD("font_get_ascent", "font", "size"), &TextServer::font_get_ascent);
@@ -226,6 +231,12 @@ void TextServer::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("font_get_underline_position", "font", "size"), &TextServer::font_get_underline_position);
 	ClassDB::bind_method(D_METHOD("font_get_underline_thickness", "font", "size"), &TextServer::font_get_underline_thickness);
+
+	ClassDB::bind_method(D_METHOD("font_get_spacing_space", "font"), &TextServer::font_get_spacing_space);
+	ClassDB::bind_method(D_METHOD("font_set_spacing_space", "font", "value"), &TextServer::font_set_spacing_space);
+
+	ClassDB::bind_method(D_METHOD("font_get_spacing_glyph", "font"), &TextServer::font_get_spacing_glyph);
+	ClassDB::bind_method(D_METHOD("font_set_spacing_glyph", "font", "value"), &TextServer::font_set_spacing_glyph);
 
 	ClassDB::bind_method(D_METHOD("font_set_antialiased", "font", "antialiased"), &TextServer::font_set_antialiased);
 	ClassDB::bind_method(D_METHOD("font_get_antialiased", "font"), &TextServer::font_get_antialiased);
@@ -280,11 +291,13 @@ void TextServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_hex_code_box_size", "size", "index"), &TextServer::get_hex_code_box_size);
 	ClassDB::bind_method(D_METHOD("draw_hex_code_box", "canvas", "size", "pos", "index", "color"), &TextServer::draw_hex_code_box);
 
+	ClassDB::bind_method(D_METHOD("font_get_glyph_contours", "font", "size", "index"), &TextServer::_font_get_glyph_contours);
+
 	/* Shaped text buffer interface */
 
 	ClassDB::bind_method(D_METHOD("create_shaped_text", "direction", "orientation"), &TextServer::create_shaped_text, DEFVAL(DIRECTION_AUTO), DEFVAL(ORIENTATION_HORIZONTAL));
 
-	ClassDB::bind_method(D_METHOD("shaped_text_clear"), &TextServer::shaped_text_clear);
+	ClassDB::bind_method(D_METHOD("shaped_text_clear", "rid"), &TextServer::shaped_text_clear);
 
 	ClassDB::bind_method(D_METHOD("shaped_text_set_direction", "shaped", "direction"), &TextServer::shaped_text_set_direction, DEFVAL(DIRECTION_AUTO));
 	ClassDB::bind_method(D_METHOD("shaped_text_get_direction", "shaped"), &TextServer::shaped_text_get_direction);
@@ -318,6 +331,9 @@ void TextServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("shaped_text_get_line_breaks_adv", "shaped", "width", "start", "once", "break_flags"), &TextServer::_shaped_text_get_line_breaks_adv, DEFVAL(0), DEFVAL(true), DEFVAL(BREAK_MANDATORY | BREAK_WORD_BOUND));
 	ClassDB::bind_method(D_METHOD("shaped_text_get_line_breaks", "shaped", "width", "start", "break_flags"), &TextServer::_shaped_text_get_line_breaks, DEFVAL(0), DEFVAL(BREAK_MANDATORY | BREAK_WORD_BOUND));
 	ClassDB::bind_method(D_METHOD("shaped_text_get_word_breaks", "shaped"), &TextServer::_shaped_text_get_word_breaks);
+
+	ClassDB::bind_method(D_METHOD("shaped_text_overrun_trim_to_width", "shaped", "width", "overrun_trim_flags"), &TextServer::shaped_text_overrun_trim_to_width, DEFVAL(0), DEFVAL(OVERRUN_NO_TRIMMING));
+
 	ClassDB::bind_method(D_METHOD("shaped_text_get_objects", "shaped"), &TextServer::shaped_text_get_objects);
 	ClassDB::bind_method(D_METHOD("shaped_text_get_object_rect", "shaped", "key"), &TextServer::shaped_text_get_object_rect);
 
@@ -368,6 +384,13 @@ void TextServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(BREAK_WORD_BOUND);
 	BIND_ENUM_CONSTANT(BREAK_GRAPHEME_BOUND);
 
+	/* TextOverrunFlag */
+	BIND_ENUM_CONSTANT(OVERRUN_NO_TRIMMING);
+	BIND_ENUM_CONSTANT(OVERRUN_TRIM);
+	BIND_ENUM_CONSTANT(OVERRUN_TRIM_WORD_ONLY);
+	BIND_ENUM_CONSTANT(OVERRUN_ADD_ELLIPSIS);
+	BIND_ENUM_CONSTANT(OVERRUN_ENFORCE_ELLIPSIS);
+
 	/* GraphemeFlag */
 	BIND_ENUM_CONSTANT(GRAPHEME_IS_RTL);
 	BIND_ENUM_CONSTANT(GRAPHEME_IS_VIRTUAL);
@@ -392,6 +415,11 @@ void TextServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(FEATURE_FONT_SYSTEM);
 	BIND_ENUM_CONSTANT(FEATURE_FONT_VARIABLE);
 	BIND_ENUM_CONSTANT(FEATURE_USE_SUPPORT_DATA);
+
+	/* FT Contour Point Types */
+	BIND_ENUM_CONSTANT(CONTOUR_CURVE_TAG_ON);
+	BIND_ENUM_CONSTANT(CONTOUR_CURVE_TAG_OFF_CONIC);
+	BIND_ENUM_CONSTANT(CONTOUR_CURVE_TAG_OFF_CUBIC);
 }
 
 Vector3 TextServer::hex_code_box_font_size[2] = { Vector3(5, 5, 1), Vector3(10, 10, 2) };
@@ -448,16 +476,16 @@ void TextServer::initialize_hex_code_box_fonts() {
 		Vector<uint8_t> hex_box_data;
 
 		Ref<Image> image;
-		image.instance();
+		image.instantiate();
 
 		Ref<ImageTexture> hex_code_image_tex[2];
 
 		hex_box_data.resize(tamsyn5x9_png_len);
 		memcpy(hex_box_data.ptrw(), tamsyn5x9_png, tamsyn5x9_png_len);
 		image->load_png_from_buffer(hex_box_data);
-		hex_code_image_tex[0].instance();
+		hex_code_image_tex[0].instantiate();
 		hex_code_image_tex[0]->create_from_image(image);
-		hex_code_box_font_tex[0].instance();
+		hex_code_box_font_tex[0].instantiate();
 		hex_code_box_font_tex[0]->set_diffuse_texture(hex_code_image_tex[0]);
 		hex_code_box_font_tex[0]->set_texture_filter(CanvasItem::TEXTURE_FILTER_NEAREST);
 		hex_box_data.clear();
@@ -465,9 +493,9 @@ void TextServer::initialize_hex_code_box_fonts() {
 		hex_box_data.resize(tamsyn10x20_png_len);
 		memcpy(hex_box_data.ptrw(), tamsyn10x20_png, tamsyn10x20_png_len);
 		image->load_png_from_buffer(hex_box_data);
-		hex_code_image_tex[1].instance();
+		hex_code_image_tex[1].instantiate();
 		hex_code_image_tex[1]->create_from_image(image);
-		hex_code_box_font_tex[1].instance();
+		hex_code_box_font_tex[1].instantiate();
 		hex_code_box_font_tex[1]->set_diffuse_texture(hex_code_image_tex[1]);
 		hex_code_box_font_tex[1]->set_texture_filter(CanvasItem::TEXTURE_FILTER_NEAREST);
 		hex_box_data.clear();
@@ -628,7 +656,7 @@ Vector<Vector2i> TextServer::shaped_text_get_line_breaks(RID p_shaped, float p_w
 	float width = 0.f;
 	int line_start = MAX(p_start, range.x);
 	int last_safe_break = -1;
-
+	int word_count = 0;
 	int l_size = logical.size();
 	const Glyph *l_gl = logical.ptr();
 
@@ -637,12 +665,15 @@ Vector<Vector2i> TextServer::shaped_text_get_line_breaks(RID p_shaped, float p_w
 			continue;
 		}
 		if (l_gl[i].count > 0) {
-			if ((p_width > 0) && (width + l_gl[i].advance > p_width) && (last_safe_break >= 0)) {
+			//Ignore trailing spaces.
+			bool is_space = (l_gl[i].flags & GRAPHEME_IS_SPACE) == GRAPHEME_IS_SPACE;
+			if ((p_width > 0) && (width + (is_space ? 0 : l_gl[i].advance) > p_width) && (last_safe_break >= 0)) {
 				lines.push_back(Vector2i(line_start, l_gl[last_safe_break].end));
 				line_start = l_gl[last_safe_break].end;
 				i = last_safe_break;
 				last_safe_break = -1;
 				width = 0;
+				word_count = 0;
 				continue;
 			}
 			if ((p_break_flags & BREAK_MANDATORY) == BREAK_MANDATORY) {
@@ -657,7 +688,11 @@ Vector<Vector2i> TextServer::shaped_text_get_line_breaks(RID p_shaped, float p_w
 			if ((p_break_flags & BREAK_WORD_BOUND) == BREAK_WORD_BOUND) {
 				if ((l_gl[i].flags & GRAPHEME_IS_BREAK_SOFT) == GRAPHEME_IS_BREAK_SOFT) {
 					last_safe_break = i;
+					word_count++;
 				}
+			}
+			if (((p_break_flags & BREAK_WORD_BOUND_ADAPTIVE) == BREAK_WORD_BOUND_ADAPTIVE) && word_count == 0) {
+				last_safe_break = i;
 			}
 			if ((p_break_flags & BREAK_GRAPHEME_BOUND) == BREAK_GRAPHEME_BOUND) {
 				last_safe_break = i;
@@ -677,7 +712,7 @@ Vector<Vector2i> TextServer::shaped_text_get_line_breaks(RID p_shaped, float p_w
 	return lines;
 }
 
-Vector<Vector2i> TextServer::shaped_text_get_word_breaks(RID p_shaped) const {
+Vector<Vector2i> TextServer::shaped_text_get_word_breaks(RID p_shaped, int p_grapheme_flags) const {
 	Vector<Vector2i> words;
 
 	const_cast<TextServer *>(this)->shaped_text_update_justification_ops(p_shaped);
@@ -691,7 +726,7 @@ Vector<Vector2i> TextServer::shaped_text_get_word_breaks(RID p_shaped) const {
 
 	for (int i = 0; i < l_size; i++) {
 		if (l_gl[i].count > 0) {
-			if (((l_gl[i].flags & GRAPHEME_IS_SPACE) == GRAPHEME_IS_SPACE) || ((l_gl[i].flags & GRAPHEME_IS_PUNCTUATION) == GRAPHEME_IS_PUNCTUATION)) {
+			if ((l_gl[i].flags & p_grapheme_flags) != 0) {
 				words.push_back(Vector2i(word_start, l_gl[i].start));
 				word_start = l_gl[i].end;
 			}
@@ -969,7 +1004,7 @@ Vector<Vector2> TextServer::shaped_text_get_selection(RID p_shaped, int p_start,
 	while (i < ranges.size()) {
 		int j = i + 1;
 		while (j < ranges.size()) {
-			if (Math::is_equal_approx(ranges[i].y, ranges[j].x, UNIT_EPSILON)) {
+			if (Math::is_equal_approx(ranges[i].y, ranges[j].x, (real_t)UNIT_EPSILON)) {
 				ranges.write[i].y = ranges[j].y;
 				ranges.remove(j);
 				continue;
@@ -1199,6 +1234,21 @@ void TextServer::shaped_text_draw_outline(RID p_shaped, RID p_canvas, const Vect
 
 RID TextServer::_create_font_memory(const PackedByteArray &p_data, const String &p_type, int p_base_size) {
 	return create_font_memory(p_data.ptr(), p_data.size(), p_type, p_base_size);
+}
+
+Dictionary TextServer::_font_get_glyph_contours(RID p_font, int p_size, uint32_t p_index) const {
+	Vector<Vector3> points;
+	Vector<int32_t> contours;
+	bool orientation;
+	bool ok = font_get_glyph_contours(p_font, p_size, p_index, points, contours, orientation);
+	Dictionary out;
+
+	if (ok) {
+		out["points"] = points;
+		out["contours"] = contours;
+		out["orientation"] = orientation;
+	}
+	return out;
 }
 
 void TextServer::_shaped_text_set_bidi_override(RID p_shaped, const Array &p_override) {

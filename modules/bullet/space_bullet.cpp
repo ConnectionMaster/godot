@@ -81,7 +81,7 @@ int BulletPhysicsDirectSpaceState::intersect_point(const Vector3 &p_point, Shape
 	btResult.m_collisionFilterMask = p_collision_mask;
 	space->dynamicsWorld->contactTest(&collision_object_point, btResult);
 
-	// The results is already populated by GodotAllConvexResultCallback
+	// The results are already populated by GodotAllConvexResultCallback
 	return btResult.m_count;
 }
 
@@ -117,7 +117,7 @@ bool BulletPhysicsDirectSpaceState::intersect_ray(const Vector3 &p_from, const V
 	}
 }
 
-int BulletPhysicsDirectSpaceState::intersect_shape(const RID &p_shape, const Transform &p_xform, float p_margin, ShapeResult *r_results, int p_result_max, const Set<RID> &p_exclude, uint32_t p_collision_mask, bool p_collide_with_bodies, bool p_collide_with_areas) {
+int BulletPhysicsDirectSpaceState::intersect_shape(const RID &p_shape, const Transform3D &p_xform, real_t p_margin, ShapeResult *r_results, int p_result_max, const Set<RID> &p_exclude, uint32_t p_collision_mask, bool p_collide_with_bodies, bool p_collide_with_areas) {
 	if (p_result_max <= 0) {
 		return 0;
 	}
@@ -152,7 +152,7 @@ int BulletPhysicsDirectSpaceState::intersect_shape(const RID &p_shape, const Tra
 	return btQuery.m_count;
 }
 
-bool BulletPhysicsDirectSpaceState::cast_motion(const RID &p_shape, const Transform &p_xform, const Vector3 &p_motion, float p_margin, float &r_closest_safe, float &r_closest_unsafe, const Set<RID> &p_exclude, uint32_t p_collision_mask, bool p_collide_with_bodies, bool p_collide_with_areas, ShapeRestInfo *r_info) {
+bool BulletPhysicsDirectSpaceState::cast_motion(const RID &p_shape, const Transform3D &p_xform, const Vector3 &p_motion, real_t p_margin, real_t &r_closest_safe, real_t &r_closest_unsafe, const Set<RID> &p_exclude, uint32_t p_collision_mask, bool p_collide_with_bodies, bool p_collide_with_areas, ShapeRestInfo *r_info) {
 	r_closest_safe = 0.0f;
 	r_closest_unsafe = 0.0f;
 	btVector3 bt_motion;
@@ -214,7 +214,7 @@ bool BulletPhysicsDirectSpaceState::cast_motion(const RID &p_shape, const Transf
 }
 
 /// Returns the list of contacts pairs in this order: Local contact, other body contact
-bool BulletPhysicsDirectSpaceState::collide_shape(RID p_shape, const Transform &p_shape_xform, float p_margin, Vector3 *r_results, int p_result_max, int &r_result_count, const Set<RID> &p_exclude, uint32_t p_collision_mask, bool p_collide_with_bodies, bool p_collide_with_areas) {
+bool BulletPhysicsDirectSpaceState::collide_shape(RID p_shape, const Transform3D &p_shape_xform, real_t p_margin, Vector3 *r_results, int p_result_max, int &r_result_count, const Set<RID> &p_exclude, uint32_t p_collision_mask, bool p_collide_with_bodies, bool p_collide_with_areas) {
 	if (p_result_max <= 0) {
 		return false;
 	}
@@ -250,7 +250,7 @@ bool BulletPhysicsDirectSpaceState::collide_shape(RID p_shape, const Transform &
 	return btQuery.m_count;
 }
 
-bool BulletPhysicsDirectSpaceState::rest_info(RID p_shape, const Transform &p_shape_xform, float p_margin, ShapeRestInfo *r_info, const Set<RID> &p_exclude, uint32_t p_collision_mask, bool p_collide_with_bodies, bool p_collide_with_areas) {
+bool BulletPhysicsDirectSpaceState::rest_info(RID p_shape, const Transform3D &p_shape_xform, real_t p_margin, ShapeRestInfo *r_info, const Set<RID> &p_exclude, uint32_t p_collision_mask, bool p_collide_with_bodies, bool p_collide_with_areas) {
 	ShapeBullet *shape = space->get_physics_server()->get_shape_owner()->getornull(p_shape);
 	ERR_FAIL_COND_V(!shape, false);
 
@@ -445,7 +445,7 @@ real_t SpaceBullet::get_param(PhysicsServer3D::SpaceParameter p_param) {
 		case PhysicsServer3D::SPACE_PARAM_BODY_ANGULAR_VELOCITY_DAMP_RATIO:
 		case PhysicsServer3D::SPACE_PARAM_CONSTRAINT_DEFAULT_BIAS:
 		default:
-			WARN_PRINT("The SpaceBullet  doesn't support this get parameter (" + itos(p_param) + "), 0 is returned.");
+			WARN_PRINT("The SpaceBullet doesn't support this get parameter (" + itos(p_param) + "), 0 is returned.");
 			return 0.f;
 	}
 }
@@ -841,7 +841,7 @@ void SpaceBullet::check_body_collision() {
 					Vector3 collisionWorldPosition;
 					Vector3 collisionLocalPosition;
 					Vector3 normalOnB;
-					float appliedImpulse = pt.m_appliedImpulse;
+					real_t appliedImpulse = pt.m_appliedImpulse;
 					B_TO_G(pt.m_normalWorldOnB, normalOnB);
 
 					// The pt.m_index only contains the shape index when more than one collision shape is used
@@ -908,7 +908,7 @@ static Ref<StandardMaterial3D> red_mat;
 static Ref<StandardMaterial3D> blue_mat;
 #endif
 
-bool SpaceBullet::test_body_motion(RigidBodyBullet *p_body, const Transform &p_from, const Vector3 &p_motion, bool p_infinite_inertia, PhysicsServer3D::MotionResult *r_result, bool p_exclude_raycast_shapes) {
+bool SpaceBullet::test_body_motion(RigidBodyBullet *p_body, const Transform3D &p_from, const Vector3 &p_motion, bool p_infinite_inertia, PhysicsServer3D::MotionResult *r_result, bool p_exclude_raycast_shapes) {
 #if debug_test_motion
 	/// Yes I know this is not good, but I've used it as fast debugging hack.
 	/// I'm leaving it here just for speedup the other eventual debugs
@@ -1062,7 +1062,7 @@ bool SpaceBullet::test_body_motion(RigidBodyBullet *p_body, const Transform &p_f
 	return has_penetration;
 }
 
-int SpaceBullet::test_ray_separation(RigidBodyBullet *p_body, const Transform &p_transform, bool p_infinite_inertia, Vector3 &r_recover_motion, PhysicsServer3D::SeparationResult *r_results, int p_result_max, float p_margin) {
+int SpaceBullet::test_ray_separation(RigidBodyBullet *p_body, const Transform3D &p_transform, bool p_infinite_inertia, Vector3 &r_recover_motion, PhysicsServer3D::SeparationResult *r_results, int p_result_max, real_t p_margin) {
 	btTransform body_transform;
 	G_TO_B(p_transform, body_transform);
 	UNSCALE_BT_BASIS(body_transform);
@@ -1092,13 +1092,13 @@ private:
 	btDbvtVolume bounds;
 
 	const btCollisionObject *self_collision_object;
-	uint32_t collision_layer;
-	uint32_t collision_mask;
+	uint32_t collision_layer = 0;
+	uint32_t collision_mask = 0;
 
 	struct CompoundLeafCallback : btDbvt::ICollide {
 	private:
-		RecoverPenetrationBroadPhaseCallback *parent_callback;
-		btCollisionObject *collision_object;
+		RecoverPenetrationBroadPhaseCallback *parent_callback = nullptr;
+		btCollisionObject *collision_object = nullptr;
 
 	public:
 		CompoundLeafCallback(RecoverPenetrationBroadPhaseCallback *p_parent_callback, btCollisionObject *p_collision_object) :
@@ -1116,8 +1116,8 @@ private:
 
 public:
 	struct BroadphaseResult {
-		btCollisionObject *collision_object;
-		int compound_child_index;
+		btCollisionObject *collision_object = nullptr;
+		int compound_child_index = 0;
 	};
 
 	Vector<BroadphaseResult> results;
@@ -1232,6 +1232,10 @@ bool SpaceBullet::recover_from_penetration(RigidBodyBullet *p_body, const btTran
 
 		if (kin_shape.shape->getShapeType() == CUSTOM_CONVEX_SHAPE_TYPE) {
 			// Skip rayshape in order to implement custom separation process
+			continue;
+		}
+
+		if (kin_shape.shape->getShapeType() == EMPTY_SHAPE_PROXYTYPE) {
 			continue;
 		}
 

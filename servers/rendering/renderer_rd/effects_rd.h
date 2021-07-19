@@ -46,7 +46,6 @@
 #include "servers/rendering/renderer_rd/shaders/screen_space_reflection.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/screen_space_reflection_filter.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/screen_space_reflection_scale.glsl.gen.h"
-#include "servers/rendering/renderer_rd/shaders/shadow_reduce.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/sort.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/specular_merge.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/ssao.glsl.gen.h"
@@ -56,6 +55,7 @@
 #include "servers/rendering/renderer_rd/shaders/ssao_interleave.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/subsurface_scattering.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/tonemap.glsl.gen.h"
+#include "servers/rendering/renderer_scene_render.h"
 
 #include "servers/rendering_server.h"
 
@@ -171,6 +171,12 @@ class EffectsRD {
 		TONEMAP_MODE_BICUBIC_GLOW_FILTER,
 		TONEMAP_MODE_1D_LUT,
 		TONEMAP_MODE_BICUBIC_GLOW_FILTER_1D_LUT,
+
+		TONEMAP_MODE_NORMAL_MULTIVIEW,
+		TONEMAP_MODE_BICUBIC_GLOW_FILTER_MULTIVIEW,
+		TONEMAP_MODE_1D_LUT_MULTIVIEW,
+		TONEMAP_MODE_BICUBIC_GLOW_FILTER_1D_LUT_MULTIVIEW,
+
 		TONEMAP_MODE_MAX
 	};
 
@@ -234,18 +240,17 @@ class EffectsRD {
 	} luminance_reduce;
 
 	struct CopyToDPPushConstant {
-		int32_t screen_size[2];
-		int32_t dest_offset[2];
-		float bias;
 		float z_far;
 		float z_near;
 		uint32_t z_flip;
+		uint32_t pad;
+		float screen_rect[4];
 	};
 
 	struct CoptToDP {
 		CubeToDpShaderRD shader;
 		RID shader_version;
-		RID pipeline;
+		PipelineCacheRD pipeline;
 	} cube_to_dp;
 
 	struct BokehPushConstant {
@@ -380,12 +385,10 @@ class EffectsRD {
 		SSAODownsamplePushConstant downsample_push_constant;
 		SsaoDownsampleShaderRD downsample_shader;
 		RID downsample_shader_version;
-		RID downsample_uniform_set;
 
 		SSAOGatherPushConstant gather_push_constant;
 		SsaoShaderRD gather_shader;
 		RID gather_shader_version;
-		RID gather_uniform_set;
 		RID gather_constants_buffer;
 		bool gather_initialized = false;
 
@@ -393,7 +396,6 @@ class EffectsRD {
 		SsaoImportanceMapShaderRD importance_map_shader;
 		RID importance_map_shader_version;
 		RID importance_map_load_counter;
-		RID importance_map_uniform_set;
 		RID counter_uniform_set;
 
 		SSAOBlurPushConstant blur_push_constant;
@@ -453,15 +455,6 @@ class EffectsRD {
 		bool use_high_quality;
 
 	} filter;
-
-	struct SkyPushConstant {
-		float orientation[12];
-		float proj[4];
-		float position[3];
-		float multiplier;
-		float time;
-		float pad[3];
-	};
 
 	enum SpecularMergeMode {
 		SPECULAR_MERGE_ADD,
@@ -587,7 +580,8 @@ class EffectsRD {
 
 	enum ResolveMode {
 		RESOLVE_MODE_GI,
-		RESOLVE_MODE_GI_GIPROBE,
+		RESOLVE_MODE_GI_VOXEL_GI,
+		RESOLVE_MODE_DEPTH,
 		RESOLVE_MODE_MAX
 	};
 
@@ -597,18 +591,6 @@ class EffectsRD {
 		RID shader_version;
 		RID pipelines[RESOLVE_MODE_MAX]; //3 quality levels
 	} resolve;
-
-	enum ShadowReduceMode {
-		SHADOW_REDUCE_REDUCE,
-		SHADOW_REDUCE_FILTER,
-		SHADOW_REDUCE_MAX
-	};
-
-	struct ShadowReduce {
-		ShadowReduceShaderRD shader;
-		RID shader_version;
-		RID pipelines[SHADOW_REDUCE_MAX];
-	} shadow_reduce;
 
 	enum SortMode {
 		SORT_MODE_BLOCK,
@@ -687,7 +669,7 @@ public:
 
 	void cubemap_roughness(RID p_source_rd_texture, RID p_dest_framebuffer, uint32_t p_face_id, uint32_t p_sample_count, float p_roughness, float p_size);
 	void make_mipmap(RID p_source_rd_texture, RID p_dest_texture, const Size2i &p_size);
-	void copy_cubemap_to_dp(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_rect, float p_z_near, float p_z_far, float p_bias, bool p_dp_flip);
+	void copy_cubemap_to_dp(RID p_source_rd_texture, RID p_dest_texture, const Rect2 &p_rect, float p_z_near, float p_z_far, bool p_dp_flip);
 	void luminance_reduction(RID p_source_texture, const Size2i p_source_size, const Vector<RID> p_reduce, RID p_prev_luminance, float p_min_luminance, float p_max_luminance, float p_adjust, bool p_set = false);
 	void bokeh_dof(RID p_base_texture, RID p_depth_texture, const Size2i &p_base_texture_size, RID p_secondary_texture, RID p_bokeh_texture1, RID p_bokeh_texture2, bool p_dof_far, float p_dof_far_begin, float p_dof_far_size, bool p_dof_near, float p_dof_near_begin, float p_dof_near_size, float p_bokeh_size, RS::DOFBokehShape p_bokeh_shape, RS::DOFBlurQuality p_quality, bool p_use_jitter, float p_cam_znear, float p_cam_zfar, bool p_cam_orthogonal);
 
@@ -728,6 +710,7 @@ public:
 		bool use_fxaa = false;
 		bool use_debanding = false;
 		Vector2i texture_size;
+		uint32_t view_count = 1;
 	};
 
 	struct SSAOSettings {
@@ -752,22 +735,19 @@ public:
 
 	void tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);
 
-	void gather_ssao(RD::ComputeListID p_compute_list, const Vector<RID> p_ao_slices, const SSAOSettings &p_settings, bool p_adaptive_base_pass);
-	void generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_depth_mipmaps_texture, const Vector<RID> &depth_mipmaps, RID p_ao, const Vector<RID> p_ao_slices, RID p_ao_pong, const Vector<RID> p_ao_pong_slices, RID p_upscale_buffer, RID p_importance_map, RID p_importance_map_pong, const CameraMatrix &p_projection, const SSAOSettings &p_settings, bool p_invalidate_uniform_sets);
+	void gather_ssao(RD::ComputeListID p_compute_list, const Vector<RID> p_ao_slices, const SSAOSettings &p_settings, bool p_adaptive_base_pass, RID p_gather_uniform_set, RID p_importance_map_uniform_set);
+	void generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_depth_mipmaps_texture, const Vector<RID> &depth_mipmaps, RID p_ao, const Vector<RID> p_ao_slices, RID p_ao_pong, const Vector<RID> p_ao_pong_slices, RID p_upscale_buffer, RID p_importance_map, RID p_importance_map_pong, const CameraMatrix &p_projection, const SSAOSettings &p_settings, bool p_invalidate_uniform_sets, RID &r_downsample_uniform_set, RID &r_gather_uniform_set, RID &r_importance_map_uniform_set);
 
 	void roughness_limit(RID p_source_normal, RID p_roughness, const Size2i &p_size, float p_curve);
 	void cubemap_downsample(RID p_source_cubemap, RID p_dest_cubemap, const Size2i &p_size);
 	void cubemap_filter(RID p_source_cubemap, Vector<RID> p_dest_cubemap, bool p_use_array);
-	void render_sky(RD::DrawListID p_list, float p_time, RID p_fb, RID p_samplers, RID p_fog, PipelineCacheRD *p_pipeline, RID p_uniform_set, RID p_texture_set, const CameraMatrix &p_camera, const Basis &p_orientation, float p_multiplier, const Vector3 &p_position);
 
 	void screen_space_reflection(RID p_diffuse, RID p_normal_roughness, RS::EnvironmentSSRRoughnessQuality p_roughness_quality, RID p_blur_radius, RID p_blur_radius2, RID p_metallic, const Color &p_metallic_mask, RID p_depth, RID p_scale_depth, RID p_scale_normal, RID p_output, RID p_output_blur, const Size2i &p_screen_size, int p_max_steps, float p_fade_in, float p_fade_out, float p_tolerance, const CameraMatrix &p_camera);
 	void merge_specular(RID p_dest_framebuffer, RID p_specular, RID p_base, RID p_reflection);
 	void sub_surface_scattering(RID p_diffuse, RID p_diffuse2, RID p_depth, const CameraMatrix &p_camera, const Size2i &p_screen_size, float p_scale, float p_depth_scale, RS::SubSurfaceScatteringQuality p_quality);
 
-	void resolve_gi(RID p_source_depth, RID p_source_normal_roughness, RID p_source_giprobe, RID p_dest_depth, RID p_dest_normal_roughness, RID p_dest_giprobe, Vector2i p_screen_size, int p_samples);
-
-	void reduce_shadow(RID p_source_shadow, RID p_dest_shadow, const Size2i &p_source_size, const Rect2i &p_source_rect, int p_shrink_limit, RenderingDevice::ComputeListID compute_list);
-	void filter_shadow(RID p_shadow, RID p_backing_shadow, const Size2i &p_source_size, const Rect2i &p_source_rect, RS::EnvVolumetricFogShadowFilter p_filter, RenderingDevice::ComputeListID compute_list, bool p_vertical = true, bool p_horizontal = true);
+	void resolve_gi(RID p_source_depth, RID p_source_normal_roughness, RID p_source_voxel_gi, RID p_dest_depth, RID p_dest_normal_roughness, RID p_dest_voxel_gi, Vector2i p_screen_size, int p_samples, uint32_t p_barrier = RD::BARRIER_MASK_ALL);
+	void resolve_depth(RID p_source_depth, RID p_dest_depth, Vector2i p_screen_size, int p_samples, uint32_t p_barrier = RD::BARRIER_MASK_ALL);
 
 	void sort_buffer(RID p_uniform_set, int p_size);
 

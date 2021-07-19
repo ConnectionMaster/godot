@@ -32,14 +32,15 @@
 #define CORE_BIND_H
 
 #include "core/io/compression.h"
+#include "core/io/dir_access.h"
+#include "core/io/file_access.h"
 #include "core/io/image.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
-#include "core/os/dir_access.h"
-#include "core/os/file_access.h"
 #include "core/os/os.h"
 #include "core/os/semaphore.h"
 #include "core/os/thread.h"
+#include "core/templates/safe_refcount.h"
 
 class _ResourceLoader : public Object {
 	GDCLASS(_ResourceLoader, Object);
@@ -56,13 +57,19 @@ public:
 		THREAD_LOAD_LOADED
 	};
 
+	enum CacheMode {
+		CACHE_MODE_IGNORE, //resource and subresources do not use path cache, no path is set into resource.
+		CACHE_MODE_REUSE, //resource and subresources use patch cache, reuse existing loaded resources instead of loading from disk when available
+		CACHE_MODE_REPLACE, //resource and and subresource use path cache, but replace existing loaded resources when available with information from disk
+	};
+
 	static _ResourceLoader *get_singleton() { return singleton; }
 
 	Error load_threaded_request(const String &p_path, const String &p_type_hint = "", bool p_use_sub_threads = false);
 	ThreadLoadStatus load_threaded_get_status(const String &p_path, Array r_progress = Array());
 	RES load_threaded_get(const String &p_path);
 
-	RES load(const String &p_path, const String &p_type_hint = "", bool p_no_cache = false);
+	RES load(const String &p_path, const String &p_type_hint = "", CacheMode p_cache_mode = CACHE_MODE_REUSE);
 	Vector<String> get_recognized_extensions_for_type(const String &p_type);
 	void set_abort_on_missing_resources(bool p_abort);
 	PackedStringArray get_dependencies(const String &p_path);
@@ -73,6 +80,7 @@ public:
 };
 
 VARIANT_ENUM_CAST(_ResourceLoader::ThreadLoadStatus);
+VARIANT_ENUM_CAST(_ResourceLoader::CacheMode);
 
 class _ResourceSaver : public Object {
 	GDCLASS(_ResourceSaver, Object);
@@ -164,6 +172,7 @@ public:
 
 	bool has_environment(const String &p_var) const;
 	String get_environment(const String &p_var) const;
+	bool set_environment(const String &p_var, const String &p_value) const;
 
 	String get_name() const;
 	Vector<String> get_cmdline_args();
@@ -190,21 +199,11 @@ public:
 
 	void set_use_file_access_save_and_swap(bool p_enable);
 
-	int get_exit_code() const;
-	void set_exit_code(int p_code);
-	Dictionary get_date(bool utc) const;
-	Dictionary get_time(bool utc) const;
-	Dictionary get_datetime(bool utc) const;
-	Dictionary get_datetime_from_unix_time(int64_t unix_time_val) const;
-	int64_t get_unix_time_from_datetime(Dictionary datetime) const;
-	Dictionary get_time_zone_info() const;
-	double get_unix_time() const;
-
 	uint64_t get_static_memory_usage() const;
 	uint64_t get_static_memory_peak_usage() const;
 
-	void delay_usec(uint32_t p_usec) const;
-	void delay_msec(uint32_t p_msec) const;
+	void delay_usec(int p_usec) const;
+	void delay_msec(int p_msec) const;
 	uint32_t get_ticks_msec() const;
 	uint64_t get_ticks_usec() const;
 
@@ -230,19 +229,19 @@ public:
 	String get_system_dir(SystemDir p_dir) const;
 
 	String get_user_data_dir() const;
+	String get_external_data_dir() const;
+	String get_config_dir() const;
+	String get_data_dir() const;
+	String get_cache_dir() const;
 
 	Error set_thread_name(const String &p_name);
+	Thread::ID get_thread_caller_id() const;
 
 	bool has_feature(const String &p_feature) const;
 
 	bool request_permission(const String &p_name);
 	bool request_permissions();
 	Vector<String> get_granted_permissions() const;
-
-	int get_tablet_driver_count() const;
-	String get_tablet_driver_name(int p_driver) const;
-	String get_current_tablet_driver() const;
-	void set_current_tablet_driver(const String &p_driver);
 
 	static _OS *get_singleton() { return singleton; }
 
@@ -349,11 +348,11 @@ public:
 	_Geometry3D() { singleton = this; }
 };
 
-class _File : public Reference {
-	GDCLASS(_File, Reference);
+class _File : public RefCounted {
+	GDCLASS(_File, RefCounted);
 
 	FileAccess *f = nullptr;
-	bool eswap = false;
+	bool big_endian = false;
 
 protected:
 	static void _bind_methods();
@@ -378,6 +377,7 @@ public:
 	Error open_compressed(const String &p_path, ModeFlags p_mode_flags, CompressionMode p_compress_mode = COMPRESSION_FASTLZ);
 
 	Error open(const String &p_path, ModeFlags p_mode_flags); // open a file.
+	void flush(); // Flush a file (write its buffer to disk).
 	void close(); // Close a file.
 	bool is_open() const; // True when file is open.
 
@@ -386,8 +386,8 @@ public:
 
 	void seek(int64_t p_position); // Seek to a given position.
 	void seek_end(int64_t p_position = 0); // Seek from the end of file.
-	int64_t get_position() const; // Get position in the file.
-	int64_t get_len() const; // Get size of the file.
+	uint64_t get_position() const; // Get position in the file.
+	uint64_t get_length() const; // Get size of the file.
 
 	bool eof_reached() const; // Reading passed EOF.
 
@@ -402,20 +402,20 @@ public:
 
 	Variant get_var(bool p_allow_objects = false) const;
 
-	Vector<uint8_t> get_buffer(int p_length) const; // Get an array of bytes.
+	Vector<uint8_t> get_buffer(int64_t p_length) const; // Get an array of bytes.
 	String get_line() const;
 	Vector<String> get_csv_line(const String &p_delim = ",") const;
 	String get_as_text() const;
 	String get_md5(const String &p_path) const;
 	String get_sha256(const String &p_path) const;
 
-	/* Use this for files WRITTEN in _big_ endian machines (ie, amiga/mac).
+	/*
+	 * Use this for files WRITTEN in _big_ endian machines (ie, amiga/mac).
 	 * It's not about the current CPU type but file formats.
-	 * This flags get reset to false (little endian) on each open.
+	 * This flag gets reset to `false` (little endian) on each open.
 	 */
-
-	void set_endian_swap(bool p_swap);
-	bool get_endian_swap();
+	void set_big_endian(bool p_big_endian);
+	bool is_big_endian();
 
 	Error get_error() const; // Get last error.
 
@@ -450,8 +450,8 @@ public:
 VARIANT_ENUM_CAST(_File::ModeFlags);
 VARIANT_ENUM_CAST(_File::CompressionMode);
 
-class _Directory : public Reference {
-	GDCLASS(_Directory, Reference);
+class _Directory : public RefCounted {
+	GDCLASS(_Directory, RefCounted);
 	DirAccess *d;
 	bool dir_open = false;
 
@@ -463,7 +463,7 @@ public:
 
 	bool is_open() const;
 
-	Error list_dir_begin(bool p_skip_navigational = false, bool p_skip_hidden = false); // This starts dir listing.
+	Error list_dir_begin(bool p_show_navigational = false, bool p_show_hidden = false); // This starts dir listing.
 	String get_next();
 	bool current_is_dir() const;
 
@@ -482,7 +482,7 @@ public:
 	bool file_exists(String p_file);
 	bool dir_exists(String p_dir);
 
-	int get_space_left();
+	uint64_t get_space_left();
 
 	Error copy(String p_from, String p_to);
 	Error rename(String p_from, String p_to);
@@ -520,8 +520,8 @@ public:
 	~_Marshalls() { singleton = nullptr; }
 };
 
-class _Mutex : public Reference {
-	GDCLASS(_Mutex, Reference);
+class _Mutex : public RefCounted {
+	GDCLASS(_Mutex, RefCounted);
 	Mutex mutex;
 
 	static void _bind_methods();
@@ -532,8 +532,8 @@ public:
 	void unlock();
 };
 
-class _Semaphore : public Reference {
-	GDCLASS(_Semaphore, Reference);
+class _Semaphore : public RefCounted {
+	GDCLASS(_Semaphore, RefCounted);
 	Semaphore semaphore;
 
 	static void _bind_methods();
@@ -544,16 +544,16 @@ public:
 	void post();
 };
 
-class _Thread : public Reference {
-	GDCLASS(_Thread, Reference);
+class _Thread : public RefCounted {
+	GDCLASS(_Thread, RefCounted);
 
 protected:
 	Variant ret;
 	Variant userdata;
-	volatile bool active = false;
+	SafeFlag active;
 	Object *target_instance = nullptr;
 	StringName target_method;
-	Thread *thread = nullptr;
+	Thread thread;
 	static void _bind_methods();
 	static void _start_func(void *ud);
 
@@ -569,9 +569,6 @@ public:
 	String get_id() const;
 	bool is_active() const;
 	Variant wait_to_finish();
-
-	_Thread() {}
-	~_Thread();
 };
 
 VARIANT_ENUM_CAST(_Thread::Priority);
@@ -588,8 +585,8 @@ public:
 	StringName get_parent_class(const StringName &p_class) const;
 	bool class_exists(const StringName &p_class) const;
 	bool is_parent_class(const StringName &p_class, const StringName &p_inherits) const;
-	bool can_instance(const StringName &p_class) const;
-	Variant instance(const StringName &p_class) const;
+	bool can_instantiate(const StringName &p_class) const;
+	Variant instantiate(const StringName &p_class) const;
 
 	bool has_signal(StringName p_class, StringName p_signal) const;
 	Dictionary get_signal(StringName p_class, StringName p_signal) const;
@@ -659,55 +656,10 @@ public:
 	void set_editor_hint(bool p_enabled);
 	bool is_editor_hint() const;
 
+	void set_print_error_messages(bool p_enabled);
+	bool is_printing_error_messages() const;
+
 	_Engine() { singleton = this; }
-};
-
-class _JSON;
-
-class JSONParseResult : public Reference {
-	GDCLASS(JSONParseResult, Reference);
-
-	friend class _JSON;
-
-	Error error;
-	String error_string;
-	int error_line = -1;
-
-	Variant result;
-
-protected:
-	static void _bind_methods();
-
-public:
-	void set_error(Error p_error);
-	Error get_error() const;
-
-	void set_error_string(const String &p_error_string);
-	String get_error_string() const;
-
-	void set_error_line(int p_error_line);
-	int get_error_line() const;
-
-	void set_result(const Variant &p_result);
-	Variant get_result() const;
-
-	JSONParseResult() {}
-};
-
-class _JSON : public Object {
-	GDCLASS(_JSON, Object);
-
-protected:
-	static void _bind_methods();
-	static _JSON *singleton;
-
-public:
-	static _JSON *get_singleton() { return singleton; }
-
-	String print(const Variant &p_value, const String &p_indent = "", bool p_sort_keys = false);
-	Ref<JSONParseResult> parse(const String &p_json);
-
-	_JSON() { singleton = this; }
 };
 
 class _EngineDebugger : public Object {

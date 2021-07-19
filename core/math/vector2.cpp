@@ -59,7 +59,7 @@ Vector2 Vector2::normalized() const {
 
 bool Vector2::is_normalized() const {
 	// use length_squared() instead of length() to avoid sqrt(), makes it more stringent.
-	return Math::is_equal_approx(length_squared(), 1.0, UNIT_EPSILON);
+	return Math::is_equal_approx(length_squared(), 1, (real_t)UNIT_EPSILON);
 }
 
 real_t Vector2::distance_to(const Vector2 &p_vector2) const {
@@ -122,14 +122,20 @@ Vector2 Vector2::project(const Vector2 &p_to) const {
 	return p_to * (dot(p_to) / p_to.length_squared());
 }
 
+Vector2 Vector2::clamp(const Vector2 &p_min, const Vector2 &p_max) const {
+	return Vector2(
+			CLAMP(x, p_min.x, p_max.x),
+			CLAMP(y, p_min.y, p_max.y));
+}
+
 Vector2 Vector2::snapped(const Vector2 &p_step) const {
 	return Vector2(
 			Math::snapped(x, p_step.x),
 			Math::snapped(y, p_step.y));
 }
 
-Vector2 Vector2::clamped(real_t p_len) const {
-	real_t l = length();
+Vector2 Vector2::limit_length(const real_t p_len) const {
+	const real_t l = length();
 	Vector2 v = *this;
 	if (l > 0 && p_len < l) {
 		v /= l;
@@ -187,7 +193,17 @@ bool Vector2::is_equal_approx(const Vector2 &p_v) const {
 	return Math::is_equal_approx(x, p_v.x) && Math::is_equal_approx(y, p_v.y);
 }
 
+Vector2::operator String() const {
+	return "(" + String::num_real(x, false) + ", " + String::num_real(y, false) + ")";
+}
+
 /* Vector2i */
+
+Vector2i Vector2i::clamp(const Vector2i &p_min, const Vector2i &p_max) const {
+	return Vector2i(
+			CLAMP(x, p_min.x, p_max.x),
+			CLAMP(y, p_min.y, p_max.y));
+}
 
 Vector2i Vector2i::operator+(const Vector2i &p_v) const {
 	return Vector2i(x + p_v.x, y + p_v.y);
@@ -211,11 +227,11 @@ Vector2i Vector2i::operator*(const Vector2i &p_v1) const {
 	return Vector2i(x * p_v1.x, y * p_v1.y);
 }
 
-Vector2i Vector2i::operator*(const int &rvalue) const {
+Vector2i Vector2i::operator*(const int32_t &rvalue) const {
 	return Vector2i(x * rvalue, y * rvalue);
 }
 
-void Vector2i::operator*=(const int &rvalue) {
+void Vector2i::operator*=(const int32_t &rvalue) {
 	x *= rvalue;
 	y *= rvalue;
 }
@@ -224,11 +240,11 @@ Vector2i Vector2i::operator/(const Vector2i &p_v1) const {
 	return Vector2i(x / p_v1.x, y / p_v1.y);
 }
 
-Vector2i Vector2i::operator/(const int &rvalue) const {
+Vector2i Vector2i::operator/(const int32_t &rvalue) const {
 	return Vector2i(x / rvalue, y / rvalue);
 }
 
-void Vector2i::operator/=(const int &rvalue) {
+void Vector2i::operator/=(const int32_t &rvalue) {
 	x /= rvalue;
 	y /= rvalue;
 }
@@ -237,11 +253,11 @@ Vector2i Vector2i::operator%(const Vector2i &p_v1) const {
 	return Vector2i(x % p_v1.x, y % p_v1.y);
 }
 
-Vector2i Vector2i::operator%(const int &rvalue) const {
+Vector2i Vector2i::operator%(const int32_t &rvalue) const {
 	return Vector2i(x % rvalue, y % rvalue);
 }
 
-void Vector2i::operator%=(const int &rvalue) {
+void Vector2i::operator%=(const int32_t &rvalue) {
 	x %= rvalue;
 	y %= rvalue;
 }
@@ -256,4 +272,8 @@ bool Vector2i::operator==(const Vector2i &p_vec2) const {
 
 bool Vector2i::operator!=(const Vector2i &p_vec2) const {
 	return x != p_vec2.x || y != p_vec2.y;
+}
+
+Vector2i::operator String() const {
+	return "(" + itos(x) + ", " + itos(y) + ")";
 }

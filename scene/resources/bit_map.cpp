@@ -38,8 +38,8 @@ void BitMap::create(const Size2 &p_size) {
 
 	width = p_size.width;
 	height = p_size.height;
-	bitmask.resize(((width * height) / 8) + 1);
-	zeromem(bitmask.ptrw(), bitmask.size());
+	bitmask.resize((((width * height) - 1) / 8) + 1);
+	memset(bitmask.ptrw(), 0, bitmask.size());
 }
 
 void BitMap::create_from_image_alpha(const Ref<Image> &p_image, float p_threshold) {
@@ -285,7 +285,7 @@ Vector<Vector2> BitMap::_march_square(const Rect2i &rect, const Point2i &start) 
 				+---+---+
 				| 4 |   |
 				+---+---+
-				this normally go RIGHT, but if its coming from RIGHT, it should go LEFT
+				this normally go RIGHT, but if it's coming from RIGHT, it should go LEFT
 				*/
 				if (case6s.has(Point2i(curx, cury))) {
 					//found, so we go left, and delete from case6s;
@@ -346,7 +346,7 @@ static Vector<Vector2> rdp(const Vector<Vector2> &v, float optimization) {
 	}
 
 	int index = -1;
-	float dist = 0;
+	float dist = 0.0;
 	//not looping first and last point
 	for (size_t i = 1, size = v.size(); i < size - 1; ++i) {
 		float cdist = perpendicular_distance(v[i], v[0], v[v.size() - 1]);
@@ -406,8 +406,8 @@ static Vector<Vector2> reduce(const Vector<Vector2> &points, const Rect2i &rect,
 
 struct FillBitsStackEntry {
 	Point2i pos;
-	int i;
-	int j;
+	int i = 0;
+	int j = 0;
 };
 
 static void fill_bits(const BitMap *p_src, Ref<BitMap> &p_map, const Point2i &p_pos, const Rect2i &rect) {
@@ -487,7 +487,7 @@ Vector<Vector<Vector2>> BitMap::clip_opaque_to_polygons(const Rect2 &p_rect, flo
 
 	Point2i from;
 	Ref<BitMap> fill;
-	fill.instance();
+	fill.instantiate();
 	fill->create(get_size());
 
 	Vector<Vector<Vector2>> polygons;
@@ -525,7 +525,7 @@ void BitMap::grow_mask(int p_pixels, const Rect2 &p_rect) {
 	Rect2i r = Rect2i(0, 0, width, height).intersection(p_rect);
 
 	Ref<BitMap> copy;
-	copy.instance();
+	copy.instantiate();
 	copy->create(get_size());
 	copy->bitmask = bitmask;
 
@@ -604,7 +604,7 @@ Array BitMap::_opaque_to_polygons_bind(const Rect2 &p_rect, float p_epsilon) con
 
 void BitMap::resize(const Size2 &p_new_size) {
 	Ref<BitMap> new_bitmap;
-	new_bitmap.instance();
+	new_bitmap.instantiate();
 	new_bitmap->create(p_new_size);
 	int lw = MIN(width, p_new_size.width);
 	int lh = MIN(height, p_new_size.height);
@@ -621,7 +621,7 @@ void BitMap::resize(const Size2 &p_new_size) {
 
 Ref<Image> BitMap::convert_to_image() const {
 	Ref<Image> image;
-	image.instance();
+	image.instantiate();
 	image->create(width, height, false, Image::FORMAT_L8);
 
 	for (int i = 0; i < width; i++) {
@@ -677,9 +677,6 @@ void BitMap::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL), "_set_data", "_get_data");
 }
 
-BitMap::BitMap() {
-	width = 0;
-	height = 0;
-}
+BitMap::BitMap() {}
 
 //////////////////////////////////////

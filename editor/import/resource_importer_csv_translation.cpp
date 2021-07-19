@@ -30,9 +30,9 @@
 
 #include "resource_importer_csv_translation.h"
 
+#include "core/io/file_access.h"
 #include "core/io/resource_saver.h"
-#include "core/os/file_access.h"
-#include "core/string/compressed_translation.h"
+#include "core/string/optimized_translation.h"
 #include "core/string/translation.h"
 
 String ResourceImporterCSVTranslation::get_importer_name() const {
@@ -104,7 +104,7 @@ Error ResourceImporterCSVTranslation::import(const String &p_source_file, const 
 
 		locales.push_back(locale);
 		Ref<Translation> translation;
-		translation.instance();
+		translation.instantiate();
 		translation->set_locale(locale);
 		translations.push_back(translation);
 	}
@@ -126,7 +126,7 @@ Error ResourceImporterCSVTranslation::import(const String &p_source_file, const 
 		Ref<Translation> xlt = translations[i];
 
 		if (compress) {
-			Ref<PHashTranslation> cxl = memnew(PHashTranslation);
+			Ref<OptimizedTranslation> cxl = memnew(OptimizedTranslation);
 			cxl->generate(xlt);
 			xlt = cxl;
 		}

@@ -105,7 +105,7 @@ void Listener3D::_notification(int p_what) {
 	}
 }
 
-Transform Listener3D::get_listener_transform() const {
+Transform3D Listener3D::get_listener_transform() const {
 	return get_global_transform().orthonormalized();
 }
 
@@ -159,8 +159,6 @@ void Listener3D::_bind_methods() {
 }
 
 Listener3D::Listener3D() {
-	current = false;
-	force_change = false;
 	set_notify_transform(true);
 	//active=false;
 }

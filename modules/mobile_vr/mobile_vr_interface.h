@@ -51,19 +51,21 @@ class MobileVRInterface : public XRInterface {
 	GDCLASS(MobileVRInterface, XRInterface);
 
 private:
-	bool initialized;
+	bool initialized = false;
 	Basis orientation;
-	float eye_height;
-	uint64_t last_ticks;
 
-	real_t intraocular_dist;
-	real_t display_width;
-	real_t display_to_lens;
-	real_t oversample;
+	// Just set some defaults for these. At some point we need to look at adding a lookup table for common device + headset combos and/or support reading cardboard QR codes
+	float eye_height = 1.85;
+	uint64_t last_ticks = 0;
 
-	//@TODO not yet used, these are needed in our distortion shader...
-	real_t k1;
-	real_t k2;
+	real_t intraocular_dist = 6.0;
+	real_t display_width = 14.5;
+	real_t display_to_lens = 4.0;
+	real_t oversample = 1.5;
+
+	real_t k1 = 0.215;
+	real_t k2 = 0.215;
+	real_t aspect = 1.0;
 
 	/*
 		logic for processing our sensor data, this was originally in our positional tracker logic but I think
@@ -73,9 +75,9 @@ private:
 	Vector3 scale_magneto(const Vector3 &p_magnetometer);
 	Basis combine_acc_mag(const Vector3 &p_grav, const Vector3 &p_magneto);
 
-	int mag_count;
-	bool has_gyro;
-	bool sensor_first;
+	int mag_count = 0;
+	bool has_gyro = false;
+	bool sensor_first = false;
 	Vector3 last_accerometer_data;
 	Vector3 last_magnetometer_data;
 	Vector3 mag_current_min;
@@ -136,16 +138,20 @@ public:
 	virtual void uninitialize() override;
 
 	virtual Size2 get_render_targetsize() override;
-	virtual bool is_stereo() override;
-	virtual Transform get_transform_for_eye(XRInterface::Eyes p_eye, const Transform &p_cam_transform) override;
-	virtual CameraMatrix get_projection_for_eye(XRInterface::Eyes p_eye, real_t p_aspect, real_t p_z_near, real_t p_z_far) override;
-	virtual void commit_for_eye(XRInterface::Eyes p_eye, RID p_render_target, const Rect2 &p_screen_rect) override;
+	virtual uint32_t get_view_count() override;
+	virtual Transform3D get_camera_transform() override;
+	virtual Transform3D get_transform_for_view(uint32_t p_view, const Transform3D &p_cam_transform) override;
+	virtual CameraMatrix get_projection_for_view(uint32_t p_view, real_t p_aspect, real_t p_z_near, real_t p_z_far) override;
+	virtual Vector<BlitToScreen> commit_views(RID p_render_target, const Rect2 &p_screen_rect) override;
 
 	virtual void process() override;
 	virtual void notification(int p_what) override {}
 
 	MobileVRInterface();
 	~MobileVRInterface();
+
+	// deprecated
+	virtual void commit_for_eye(XRInterface::Eyes p_eye, RID p_render_target, const Rect2 &p_screen_rect) override;
 };
 
 #endif // !MOBILE_VR_INTERFACE_H

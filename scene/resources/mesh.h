@@ -141,6 +141,7 @@ public:
 	virtual Ref<Material> surface_get_material(int p_idx) const = 0;
 	virtual int get_blend_shape_count() const = 0;
 	virtual StringName get_blend_shape_name(int p_index) const = 0;
+	virtual void set_blend_shape_name(int p_index, const StringName &p_name) = 0;
 
 	Vector<Face3> get_faces() const;
 	Ref<TriangleMesh> generate_triangle_mesh() const;
@@ -148,7 +149,7 @@ public:
 	void generate_debug_mesh_indices(Vector<Vector3> &r_points);
 
 	Ref<Shape3D> create_trimesh_shape() const;
-	Ref<Shape3D> create_convex_shape() const;
+	Ref<Shape3D> create_convex_shape(bool p_clean = true, bool p_simplify = false) const;
 
 	Ref<Mesh> create_outline(float p_margin) const;
 
@@ -158,11 +159,14 @@ public:
 	Size2i get_lightmap_size_hint() const;
 	void clear_cache() const;
 
-	typedef Vector<Vector<Face3>> (*ConvexDecompositionFunc)(const Vector<Face3> &);
+	typedef Vector<Vector<Face3>> (*ConvexDecompositionFunc)(const Vector<Face3> &p_faces, int p_max_convex_hulls);
 
 	static ConvexDecompositionFunc convex_composition_function;
 
-	Vector<Ref<Shape3D>> convex_decompose() const;
+	Vector<Ref<Shape3D>> convex_decompose(int p_max_convex_hulls = -1) const;
+
+	virtual int get_builtin_bind_pose_count() const;
+	virtual Transform3D get_builtin_bind_pose(int p_index) const;
 
 	Mesh();
 };
@@ -176,23 +180,24 @@ class ArrayMesh : public Mesh {
 
 	Array _get_surfaces() const;
 	void _set_surfaces(const Array &p_data);
+	Ref<ArrayMesh> shadow_mesh;
 
 private:
 	struct Surface {
-		uint32_t format;
-		int array_length;
-		int index_array_length;
-		PrimitiveType primitive;
+		uint32_t format = 0;
+		int array_length = 0;
+		int index_array_length = 0;
+		PrimitiveType primitive = PrimitiveType::PRIMITIVE_MAX;
 
 		String name;
 		AABB aabb;
 		Ref<Material> material;
-		bool is_2d;
+		bool is_2d = false;
 	};
 	Vector<Surface> surfaces;
 	mutable RID mesh;
 	AABB aabb;
-	BlendShapeMode blend_shape_mode;
+	BlendShapeMode blend_shape_mode = BLEND_SHAPE_MODE_RELATIVE;
 	Vector<StringName> blend_shapes;
 	AABB custom_aabb;
 
@@ -205,6 +210,8 @@ protected:
 	bool _set(const StringName &p_name, const Variant &p_value);
 	bool _get(const StringName &p_name, Variant &r_ret) const;
 	void _get_property_list(List<PropertyInfo> *p_list) const;
+
+	virtual void reset_state() override;
 
 	static void _bind_methods();
 
@@ -220,12 +227,15 @@ public:
 	void add_blend_shape(const StringName &p_name);
 	int get_blend_shape_count() const override;
 	StringName get_blend_shape_name(int p_index) const override;
+	void set_blend_shape_name(int p_index, const StringName &p_name) override;
 	void clear_blend_shapes();
 
 	void set_blend_shape_mode(BlendShapeMode p_mode);
 	BlendShapeMode get_blend_shape_mode() const;
 
-	void surface_update_region(int p_surface, int p_offset, const Vector<uint8_t> &p_data);
+	void surface_update_vertex_region(int p_surface, int p_offset, const Vector<uint8_t> &p_data);
+	void surface_update_attribute_region(int p_surface, int p_offset, const Vector<uint8_t> &p_data);
+	void surface_update_skin_region(int p_surface, int p_offset, const Vector<uint8_t> &p_data);
 
 	int get_surface_count() const override;
 
@@ -254,10 +264,13 @@ public:
 
 	void regen_normal_maps();
 
-	Error lightmap_unwrap(const Transform &p_base_transform = Transform(), float p_texel_size = 0.05);
-	Error lightmap_unwrap_cached(int *&r_cache_data, unsigned int &r_cache_size, bool &r_used_cache, const Transform &p_base_transform = Transform(), float p_texel_size = 0.05);
+	Error lightmap_unwrap(const Transform3D &p_base_transform = Transform3D(), float p_texel_size = 0.05);
+	Error lightmap_unwrap_cached(const Transform3D &p_base_transform, float p_texel_size, const Vector<uint8_t> &p_src_cache, Vector<uint8_t> &r_dst_cache, bool p_generate_cache = true);
 
 	virtual void reload_from_file() override;
+
+	void set_shadow_mesh(const Ref<ArrayMesh> &p_mesh);
+	Ref<ArrayMesh> get_shadow_mesh() const;
 
 	ArrayMesh();
 

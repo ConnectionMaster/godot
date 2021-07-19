@@ -32,7 +32,7 @@
 #define OPEN_SIMPLEX_NOISE_H
 
 #include "core/io/image.h"
-#include "core/object/reference.h"
+#include "core/object/ref_counted.h"
 #include "scene/resources/texture.h"
 
 #include "thirdparty/misc/open-simplex-noise.h"
@@ -48,11 +48,11 @@ class OpenSimplexNoise : public Resource {
 
 	osn_context contexts[MAX_OCTAVES];
 
-	int seed;
-	float persistence; // Controls details, value in [0,1]. Higher increases grain, lower increases smoothness.
-	int octaves; // Number of noise layers
-	float period; // Distance above which we start to see similarities. The higher, the longer "hills" will be on a terrain.
-	float lacunarity; // Controls period change across octaves. 2 is usually a good value to address all detail levels.
+	int seed = 0;
+	float persistence = 0.5; // Controls details, value in [0,1]. Higher increases grain, lower increases smoothness.
+	int octaves = 3; // Number of noise layers
+	float period = 64.0; // Distance above which we start to see similarities. The higher, the longer "hills" will be on a terrain.
+	float lacunarity = 2.0; // Controls period change across octaves. 2 is usually a good value to address all detail levels.
 
 public:
 	OpenSimplexNoise();
@@ -75,7 +75,7 @@ public:
 	void set_lacunarity(float p_lacunarity);
 	float get_lacunarity() const { return lacunarity; }
 
-	Ref<Image> get_image(int p_width, int p_height) const;
+	Ref<Image> get_image(int p_width, int p_height, const Vector2 &p_noise_offset = Vector2()) const;
 	Ref<Image> get_seamless_image(int p_size) const;
 
 	float get_noise_1d(float x) const;

@@ -171,17 +171,22 @@ void Sprite2DEditor::_update_mesh_data() {
 		return;
 	}
 
-	Ref<Image> image = texture->get_data();
+	Ref<Image> image = texture->get_image();
 	ERR_FAIL_COND(image.is_null());
+
+	if (image->is_compressed()) {
+		image->decompress();
+	}
+
 	Rect2 rect;
-	if (node->is_region()) {
+	if (node->is_region_enabled()) {
 		rect = node->get_region_rect();
 	} else {
 		rect.size = Size2(image->get_width(), image->get_height());
 	}
 
 	Ref<BitMap> bm;
-	bm.instance();
+	bm.instantiate();
 	bm->create_from_image_alpha(image);
 
 	int shrink = shrink_pixels->get_value();
@@ -317,7 +322,7 @@ void Sprite2DEditor::_convert_to_mesh_2d_node() {
 	}
 
 	Ref<ArrayMesh> mesh;
-	mesh.instance();
+	mesh.instantiate();
 
 	Array a;
 	a.resize(Mesh::ARRAY_MAX);
@@ -430,7 +435,7 @@ void Sprite2DEditor::_create_light_occluder_2d_node() {
 		Vector<Vector2> outline = computed_outline_lines[i];
 
 		Ref<OccluderPolygon2D> polygon;
-		polygon.instance();
+		polygon.instantiate();
 
 		PackedVector2Array a;
 		a.resize(outline.size());

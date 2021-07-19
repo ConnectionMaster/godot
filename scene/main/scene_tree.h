@@ -47,12 +47,13 @@ class Window;
 class Material;
 class Mesh;
 class SceneDebugger;
+class Tween;
 
-class SceneTreeTimer : public Reference {
-	GDCLASS(SceneTreeTimer, Reference);
+class SceneTreeTimer : public RefCounted {
+	GDCLASS(SceneTreeTimer, RefCounted);
 
-	float time_left;
-	bool process_pause;
+	float time_left = 0.0;
+	bool process_always = true;
 
 protected:
 	static void _bind_methods();
@@ -61,8 +62,8 @@ public:
 	void set_time_left(float p_time);
 	float get_time_left() const;
 
-	void set_pause_mode_process(bool p_pause_mode_process);
-	bool is_pause_mode_process();
+	void set_process_always(bool p_process_always);
+	bool is_process_always();
 
 	void release_connections();
 
@@ -80,8 +81,7 @@ public:
 private:
 	struct Group {
 		Vector<Node *> nodes;
-		bool changed;
-		Group() { changed = false; };
+		bool changed = false;
 	};
 
 	Window *root = nullptr;
@@ -96,7 +96,7 @@ private:
 	bool debug_collisions_hint = false;
 	bool debug_navigation_hint = false;
 #endif
-	bool pause = false;
+	bool paused = false;
 	int root_lock = 0;
 
 	Map<StringName, Group> group_map;
@@ -152,18 +152,12 @@ private:
 	//void _call_group(uint32_t p_call_flags,const StringName& p_group,const StringName& p_function,const Variant& p_arg1,const Variant& p_arg2);
 
 	List<Ref<SceneTreeTimer>> timers;
+	List<Ref<Tween>> tweens;
 
 	///network///
 
 	Ref<MultiplayerAPI> multiplayer;
 	bool multiplayer_poll = true;
-
-	void _network_peer_connected(int p_id);
-	void _network_peer_disconnected(int p_id);
-
-	void _connected_to_server();
-	void _connection_failed();
-	void _server_disconnected();
 
 	static SceneTree *singleton;
 	friend class Node;
@@ -172,6 +166,7 @@ private:
 	void node_added(Node *p_node);
 	void node_removed(Node *p_node);
 	void node_renamed(Node *p_node);
+	void process_tweens(float p_delta, bool p_physics_frame);
 
 	Group *add_to_group(const StringName &p_group, Node *p_node);
 	void remove_from_group(const StringName &p_group, Node *p_node);
@@ -246,7 +241,7 @@ public:
 	void set_auto_accept_quit(bool p_enable);
 	void set_quit_on_go_back(bool p_enable);
 
-	void quit(int p_exit_code = -1);
+	void quit(int p_exit_code = EXIT_SUCCESS);
 
 	_FORCE_INLINE_ float get_physics_process_time() const { return physics_process_time; }
 	_FORCE_INLINE_ float get_process_time() const { return process_time; }
@@ -303,6 +298,7 @@ public:
 	void queue_delete(Object *p_object);
 
 	void get_nodes_in_group(const StringName &p_group, List<Node *> *p_list);
+	Node *get_first_node_in_group(const StringName &p_group);
 	bool has_group(const StringName &p_identifier) const;
 
 	//void change_scene(const String& p_path);
@@ -317,7 +313,9 @@ public:
 	Error change_scene_to(const Ref<PackedScene> &p_scene);
 	Error reload_current_scene();
 
-	Ref<SceneTreeTimer> create_timer(float p_delay_sec, bool p_process_pause = true);
+	Ref<SceneTreeTimer> create_timer(float p_delay_sec, bool p_process_always = true);
+	Ref<Tween> create_tween();
+	Array get_processed_tweens();
 
 	//used by Main::start, don't use otherwise
 	void add_current_scene(Node *p_current);
@@ -332,16 +330,6 @@ public:
 	void set_multiplayer_poll_enabled(bool p_enabled);
 	bool is_multiplayer_poll_enabled() const;
 	void set_multiplayer(Ref<MultiplayerAPI> p_multiplayer);
-	void set_network_peer(const Ref<NetworkedMultiplayerPeer> &p_network_peer);
-	Ref<NetworkedMultiplayerPeer> get_network_peer() const;
-	bool is_network_server() const;
-	bool has_network_peer() const;
-	int get_network_unique_id() const;
-	Vector<int> get_network_connected_peers() const;
-	int get_rpc_sender_id() const;
-
-	void set_refuse_new_network_connections(bool p_refuse);
-	bool is_refusing_new_network_connections() const;
 
 	static void add_idle_callback(IdleCallback p_callback);
 

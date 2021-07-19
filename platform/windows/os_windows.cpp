@@ -39,14 +39,12 @@
 #include "core/version_generated.gen.h"
 #include "drivers/windows/dir_access_windows.h"
 #include "drivers/windows/file_access_windows.h"
-#include "drivers/windows/thread_windows.h"
 #include "joypad_windows.h"
 #include "lang_table.h"
 #include "main/main.h"
 #include "platform/windows/display_server_windows.h"
 #include "servers/audio_server.h"
 #include "servers/rendering/rendering_server_default.h"
-#include "servers/rendering/rendering_server_wrap_mt.h"
 #include "windows_terminal_logger.h"
 
 #include <avrt.h>
@@ -176,8 +174,6 @@ void OS_Windows::initialize() {
 
 	//RedirectIOToConsole();
 
-	ThreadWindows::make_default();
-
 	FileAccess::make_default<FileAccessWindows>(FileAccess::ACCESS_RESOURCES);
 	FileAccess::make_default<FileAccessWindows>(FileAccess::ACCESS_USERDATA);
 	FileAccess::make_default<FileAccessWindows>(FileAccess::ACCESS_FILESYSTEM);
@@ -208,7 +204,7 @@ void OS_Windows::initialize() {
 	current_pi.pi.hProcess = GetCurrentProcess();
 	process_map->insert(GetCurrentProcessId(), current_pi);
 
-	IP_Unix::make_default();
+	IPUnix::make_default();
 	main_loop = nullptr;
 }
 
@@ -319,8 +315,8 @@ OS::Time OS_Windows::get_time(bool utc) const {
 
 	Time time;
 	time.hour = systemtime.wHour;
-	time.min = systemtime.wMinute;
-	time.sec = systemtime.wSecond;
+	time.minute = systemtime.wMinute;
+	time.second = systemtime.wSecond;
 	return time;
 }
 
@@ -338,7 +334,7 @@ OS::TimeZoneInfo OS_Windows::get_time_zone_info() const {
 	}
 
 	// Bias value returned by GetTimeZoneInformation is inverted of what we expect
-	// For example on GMT-3 GetTimeZoneInformation return a Bias of 180, so invert the value to get -180
+	// For example, on GMT-3 GetTimeZoneInformation return a Bias of 180, so invert the value to get -180
 	ret.bias = -info.Bias;
 	return ret;
 }
@@ -635,31 +631,45 @@ MainLoop *OS_Windows::get_main_loop() const {
 }
 
 String OS_Windows::get_config_path() const {
-	if (has_environment("XDG_CONFIG_HOME")) { // unlikely, but after all why not?
-		return get_environment("XDG_CONFIG_HOME");
-	} else if (has_environment("APPDATA")) {
-		return get_environment("APPDATA");
-	} else {
-		return ".";
+	// The XDG Base Directory specification technically only applies on Linux/*BSD, but it doesn't hurt to support it on Windows as well.
+	if (has_environment("XDG_CONFIG_HOME")) {
+		if (get_environment("XDG_CONFIG_HOME").is_absolute_path()) {
+			return get_environment("XDG_CONFIG_HOME").replace("\\", "/");
+		} else {
+			WARN_PRINT_ONCE("`XDG_CONFIG_HOME` is a relative path. Ignoring its value and falling back to `%APPDATA%` or `.` per the XDG Base Directory specification.");
+		}
 	}
+	if (has_environment("APPDATA")) {
+		return get_environment("APPDATA").replace("\\", "/");
+	}
+	return ".";
 }
 
 String OS_Windows::get_data_path() const {
+	// The XDG Base Directory specification technically only applies on Linux/*BSD, but it doesn't hurt to support it on Windows as well.
 	if (has_environment("XDG_DATA_HOME")) {
-		return get_environment("XDG_DATA_HOME");
-	} else {
-		return get_config_path();
+		if (get_environment("XDG_DATA_HOME").is_absolute_path()) {
+			return get_environment("XDG_DATA_HOME").replace("\\", "/");
+		} else {
+			WARN_PRINT_ONCE("`XDG_DATA_HOME` is a relative path. Ignoring its value and falling back to `get_config_path()` per the XDG Base Directory specification.");
+		}
 	}
+	return get_config_path();
 }
 
 String OS_Windows::get_cache_path() const {
+	// The XDG Base Directory specification technically only applies on Linux/*BSD, but it doesn't hurt to support it on Windows as well.
 	if (has_environment("XDG_CACHE_HOME")) {
-		return get_environment("XDG_CACHE_HOME");
-	} else if (has_environment("TEMP")) {
-		return get_environment("TEMP");
-	} else {
-		return get_config_path();
+		if (get_environment("XDG_CACHE_HOME").is_absolute_path()) {
+			return get_environment("XDG_CACHE_HOME").replace("\\", "/");
+		} else {
+			WARN_PRINT_ONCE("`XDG_CACHE_HOME` is a relative path. Ignoring its value and falling back to `%TEMP%` or `get_config_path()` per the XDG Base Directory specification.");
+		}
 	}
+	if (has_environment("TEMP")) {
+		return get_environment("TEMP").replace("\\", "/");
+	}
+	return get_config_path();
 }
 
 // Get properly capitalized engine name for system paths
@@ -700,7 +710,7 @@ String OS_Windows::get_system_dir(SystemDir p_dir) const {
 	PWSTR szPath;
 	HRESULT res = SHGetKnownFolderPath(id, 0, nullptr, &szPath);
 	ERR_FAIL_COND_V(res != S_OK, String());
-	String path = String::utf16((const char16_t *)szPath);
+	String path = String::utf16((const char16_t *)szPath).replace("\\", "/");
 	CoTaskMemFree(szPath);
 	return path;
 }
@@ -769,76 +779,11 @@ Error OS_Windows::move_to_trash(const String &p_path) {
 	return OK;
 }
 
-int OS_Windows::get_tablet_driver_count() const {
-	return tablet_drivers.size();
-}
-
-String OS_Windows::get_tablet_driver_name(int p_driver) const {
-	if (p_driver < 0 || p_driver >= tablet_drivers.size()) {
-		return "";
-	} else {
-		return tablet_drivers[p_driver];
-	}
-}
-
-String OS_Windows::get_current_tablet_driver() const {
-	return tablet_driver;
-}
-
-void OS_Windows::set_current_tablet_driver(const String &p_driver) {
-	if (get_tablet_driver_count() == 0) {
-		return;
-	}
-	bool found = false;
-	for (int i = 0; i < get_tablet_driver_count(); i++) {
-		if (p_driver == get_tablet_driver_name(i)) {
-			found = true;
-		}
-	}
-	if (found) {
-		if (DisplayServerWindows::get_singleton()) {
-			((DisplayServerWindows *)DisplayServerWindows::get_singleton())->_update_tablet_ctx(tablet_driver, p_driver);
-		}
-		tablet_driver = p_driver;
-	} else {
-		ERR_PRINT("Unknown tablet driver " + p_driver + ".");
-	}
-}
-
 OS_Windows::OS_Windows(HINSTANCE _hInstance) {
 	ticks_per_second = 0;
 	ticks_start = 0;
 	main_loop = nullptr;
 	process_map = nullptr;
-
-	//Note: Wacom WinTab driver API for pen input, for devices incompatible with Windows Ink.
-	HMODULE wintab_lib = LoadLibraryW(L"wintab32.dll");
-	if (wintab_lib) {
-		DisplayServerWindows::wintab_WTOpen = (WTOpenPtr)GetProcAddress(wintab_lib, "WTOpenW");
-		DisplayServerWindows::wintab_WTClose = (WTClosePtr)GetProcAddress(wintab_lib, "WTClose");
-		DisplayServerWindows::wintab_WTInfo = (WTInfoPtr)GetProcAddress(wintab_lib, "WTInfoW");
-		DisplayServerWindows::wintab_WTPacket = (WTPacketPtr)GetProcAddress(wintab_lib, "WTPacket");
-		DisplayServerWindows::wintab_WTEnable = (WTEnablePtr)GetProcAddress(wintab_lib, "WTEnable");
-
-		DisplayServerWindows::wintab_available = DisplayServerWindows::wintab_WTOpen && DisplayServerWindows::wintab_WTClose && DisplayServerWindows::wintab_WTInfo && DisplayServerWindows::wintab_WTPacket && DisplayServerWindows::wintab_WTEnable;
-	}
-
-	if (DisplayServerWindows::wintab_available) {
-		tablet_drivers.push_back("wintab");
-	}
-
-	//Note: Windows Ink API for pen input, available on Windows 8+ only.
-	HMODULE user32_lib = LoadLibraryW(L"user32.dll");
-	if (user32_lib) {
-		DisplayServerWindows::win8p_GetPointerType = (GetPointerTypePtr)GetProcAddress(user32_lib, "GetPointerType");
-		DisplayServerWindows::win8p_GetPointerPenInfo = (GetPointerPenInfoPtr)GetProcAddress(user32_lib, "GetPointerPenInfo");
-
-		DisplayServerWindows::winink_available = DisplayServerWindows::win8p_GetPointerType && DisplayServerWindows::win8p_GetPointerPenInfo;
-	}
-
-	if (DisplayServerWindows::winink_available) {
-		tablet_drivers.push_back("winink");
-	}
 
 	force_quit = false;
 

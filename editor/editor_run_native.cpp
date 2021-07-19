@@ -43,13 +43,13 @@ void EditorRunNative::_notification(int p_what) {
 			}
 			Ref<ImageTexture> icon = eep->get_run_icon();
 			if (!icon.is_null()) {
-				Ref<Image> im = icon->get_data();
+				Ref<Image> im = icon->get_image();
 				im = im->duplicate();
 				im->clear_mipmaps();
 				if (!im->is_empty()) {
 					im->resize(16 * EDSCALE, 16 * EDSCALE);
 					Ref<ImageTexture> small_icon;
-					small_icon.instance();
+					small_icon.instantiate();
 					small_icon->create_from_image(im);
 					MenuButton *mb = memnew(MenuButton);
 					mb->get_popup()->connect("id_pressed", callable_mp(this, &EditorRunNative::_run_native), varray(i));

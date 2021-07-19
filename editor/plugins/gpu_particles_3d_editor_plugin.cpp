@@ -177,7 +177,7 @@ void GPUParticles3DEditorBase::_node_selected(const NodePath &p_path) {
 		return;
 	}
 
-	Transform geom_xform = base_node->get_global_transform().affine_inverse() * vi->get_global_transform();
+	Transform3D geom_xform = base_node->get_global_transform().affine_inverse() * vi->get_global_transform();
 
 	int gc = geometry.size();
 	Face3 *w = geometry.ptrw();
@@ -263,7 +263,7 @@ void GPUParticles3DEditor::_menu_option(int p_option) {
 			cpu_particles->set_name(node->get_name());
 			cpu_particles->set_transform(node->get_transform());
 			cpu_particles->set_visible(node->is_visible());
-			cpu_particles->set_pause_mode(node->get_pause_mode());
+			cpu_particles->set_process_mode(node->get_process_mode());
 
 			UndoRedo *ur = EditorNode::get_singleton()->get_undo_redo();
 			ur->create_action(TTR("Convert to CPUParticles3D"));
@@ -346,7 +346,7 @@ void GPUParticles3DEditor::_generate_emission_points() {
 
 	{
 		uint8_t *iw = point_img.ptrw();
-		zeromem(iw, w * h * 3 * sizeof(float));
+		memset(iw, 0, w * h * 3 * sizeof(float));
 		const Vector3 *r = points.ptr();
 		float *wf = (float *)iw;
 		for (int i = 0; i < point_count; i++) {
@@ -359,7 +359,7 @@ void GPUParticles3DEditor::_generate_emission_points() {
 	Ref<Image> image = memnew(Image(w, h, false, Image::FORMAT_RGBF, point_img));
 
 	Ref<ImageTexture> tex;
-	tex.instance();
+	tex.instantiate();
 
 	Ref<ParticlesMaterial> material = node->get_process_material();
 	ERR_FAIL_COND(material.is_null());
@@ -374,7 +374,7 @@ void GPUParticles3DEditor::_generate_emission_points() {
 
 		{
 			uint8_t *iw = point_img2.ptrw();
-			zeromem(iw, w * h * 3 * sizeof(float));
+			memset(iw, 0, w * h * 3 * sizeof(float));
 			const Vector3 *r = normals.ptr();
 			float *wf = (float *)iw;
 			for (int i = 0; i < point_count; i++) {
@@ -387,7 +387,7 @@ void GPUParticles3DEditor::_generate_emission_points() {
 		Ref<Image> image2 = memnew(Image(w, h, false, Image::FORMAT_RGBF, point_img2));
 
 		Ref<ImageTexture> tex2;
-		tex2.instance();
+		tex2.instantiate();
 
 		material->set_emission_normal_texture(tex2);
 	} else {

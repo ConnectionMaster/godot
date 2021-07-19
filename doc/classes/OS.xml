@@ -54,7 +54,7 @@
 			<argument index="0" name="msec" type="int">
 			</argument>
 			<description>
-				Delay execution of the current thread by [code]msec[/code] milliseconds.
+				Delay execution of the current thread by [code]msec[/code] milliseconds. [code]usec[/code] must be greater than or equal to [code]0[/code]. Otherwise, [method delay_msec] will do nothing and will print an error message.
 			</description>
 		</method>
 		<method name="delay_usec" qualifiers="const">
@@ -63,7 +63,7 @@
 			<argument index="0" name="usec" type="int">
 			</argument>
 			<description>
-				Delay execution of the current thread by [code]usec[/code] microseconds.
+				Delay execution of the current thread by [code]usec[/code] microseconds. [code]usec[/code] must be greater than or equal to [code]0[/code]. Otherwise, [method delay_usec] will do nothing and will print an error message.
 			</description>
 		</method>
 		<method name="dump_memory_to_file">
@@ -94,7 +94,7 @@
 			</argument>
 			<argument index="1" name="arguments" type="PackedStringArray">
 			</argument>
-			<argument index="2" name="output" type="Array" default="[  ]">
+			<argument index="2" name="output" type="Array" default="[]">
 			</argument>
 			<argument index="3" name="read_stderr" type="bool" default="false">
 			</argument>
@@ -136,6 +136,14 @@
 				Returns the keycode of the given string (e.g. "Escape").
 			</description>
 		</method>
+		<method name="get_cache_dir" qualifiers="const">
+			<return type="String">
+			</return>
+			<description>
+				Returns the [i]global[/i] cache data directory according to the operating system's standards. On desktop platforms, this path can be overridden by setting the [code]XDG_CACHE_HOME[/code] environment variable before starting the project. See [url=https://docs.godotengine.org/en/latest/tutorials/io/data_paths.html]File paths in Godot projects[/url] in the documentation for more information. See also [method get_config_dir] and [method get_data_dir].
+				Not to be confused with [method get_user_data_dir], which returns the [i]project-specific[/i] user data path.
+			</description>
+		</method>
 		<method name="get_cmdline_args">
 			<return type="PackedStringArray">
 			</return>
@@ -143,7 +151,7 @@
 				Returns the command-line arguments passed to the engine.
 				Command-line arguments can be written in any form, including both [code]--key value[/code] and [code]--key=value[/code] forms so they can be properly parsed, as long as custom command-line arguments do not conflict with engine arguments.
 				You can also incorporate environment variables using the [method get_environment] method.
-				You can set [code]editor/main_run_args[/code] in the Project Settings to define command-line arguments to be passed by the editor when running the project.
+				You can set [member ProjectSettings.editor/run/main_run_args] to define command-line arguments to be passed by the editor when running the project.
 				Here's a minimal example on how to parse command-line arguments into a dictionary using the [code]--key=value[/code] form for arguments:
 				[codeblocks]
 				[gdscript]
@@ -167,6 +175,14 @@
 				[/codeblocks]
 			</description>
 		</method>
+		<method name="get_config_dir" qualifiers="const">
+			<return type="String">
+			</return>
+			<description>
+				Returns the [i]global[/i] user configuration directory according to the operating system's standards. On desktop platforms, this path can be overridden by setting the [code]XDG_CONFIG_HOME[/code] environment variable before starting the project. See [url=https://docs.godotengine.org/en/latest/tutorials/io/data_paths.html]File paths in Godot projects[/url] in the documentation for more information. See also [method get_cache_dir] and [method get_data_dir].
+				Not to be confused with [method get_user_data_dir], which returns the [i]project-specific[/i] user data path.
+			</description>
+		</method>
 		<method name="get_connected_midi_inputs">
 			<return type="PackedStringArray">
 			</return>
@@ -176,41 +192,22 @@
 				[b]Note:[/b] This method is implemented on Linux, macOS and Windows.
 			</description>
 		</method>
-		<method name="get_date" qualifiers="const">
-			<return type="Dictionary">
+		<method name="get_data_dir" qualifiers="const">
+			<return type="String">
 			</return>
-			<argument index="0" name="utc" type="bool" default="false">
-			</argument>
 			<description>
-				Returns current date as a dictionary of keys: [code]year[/code], [code]month[/code], [code]day[/code], [code]weekday[/code], [code]dst[/code] (Daylight Savings Time).
-			</description>
-		</method>
-		<method name="get_datetime" qualifiers="const">
-			<return type="Dictionary">
-			</return>
-			<argument index="0" name="utc" type="bool" default="false">
-			</argument>
-			<description>
-				Returns current datetime as a dictionary of keys: [code]year[/code], [code]month[/code], [code]day[/code], [code]weekday[/code], [code]dst[/code] (Daylight Savings Time), [code]hour[/code], [code]minute[/code], [code]second[/code].
-			</description>
-		</method>
-		<method name="get_datetime_from_unix_time" qualifiers="const">
-			<return type="Dictionary">
-			</return>
-			<argument index="0" name="unix_time_val" type="int">
-			</argument>
-			<description>
-				Gets a dictionary of time values corresponding to the given UNIX epoch time (in seconds).
-				The returned Dictionary's values will be the same as [method get_datetime], with the exception of Daylight Savings Time as it cannot be determined from the epoch.
+				Returns the [i]global[/i] user data directory according to the operating system's standards. On desktop platforms, this path can be overridden by setting the [code]XDG_DATA_HOME[/code] environment variable before starting the project. See [url=https://docs.godotengine.org/en/latest/tutorials/io/data_paths.html]File paths in Godot projects[/url] in the documentation for more information. See also [method get_cache_dir] and [method get_config_dir].
+				Not to be confused with [method get_user_data_dir], which returns the [i]project-specific[/i] user data path.
 			</description>
 		</method>
 		<method name="get_environment" qualifiers="const">
 			<return type="String">
 			</return>
-			<argument index="0" name="environment" type="String">
+			<argument index="0" name="variable" type="String">
 			</argument>
 			<description>
-				Returns an environment variable.
+				Returns the value of an environment variable. Returns an empty string if the environment variable doesn't exist.
+				[b]Note:[/b] Double-check the casing of [code]variable[/code]. Environment variable names are case-sensitive on all platforms except Windows.
 			</description>
 		</method>
 		<method name="get_executable_path" qualifiers="const">
@@ -218,6 +215,13 @@
 			</return>
 			<description>
 				Returns the path to the current engine executable.
+			</description>
+		</method>
+		<method name="get_external_data_dir" qualifiers="const">
+			<return type="String">
+			</return>
+			<description>
+				On Android, returns the absolute directory path where user data can be written to external storage if available. On all other platforms, this will return the same location as [method get_user_data_dir].
 			</description>
 		</method>
 		<method name="get_granted_permissions" qualifiers="const">
@@ -243,9 +247,9 @@
 			</return>
 			<description>
 				Returns the host OS locale as a string of the form [code]language_Script_COUNTRY_VARIANT@extra[/code].
-				[code]language[/code] - 2 or 3 letter [url=https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes]language code[/url], in lower case.
-				[code]Script[/code] - optional, 4 letter [url=https://en.wikipedia.org/wiki/ISO_15924]script code[/url], in title case.
-				[code]COUNTRY[/code] - optional, 2 or 3 letter [url=https://en.wikipedia.org/wiki/ISO_3166-1]country code[/url], in upper case.
+				[code]language[/code] - 2 or 3-letter [url=https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes]language code[/url], in lower case.
+				[code]Script[/code] - optional, 4-letter [url=https://en.wikipedia.org/wiki/ISO_15924]script code[/url], in title case.
+				[code]COUNTRY[/code] - optional, 2 or 3-letter [url=https://en.wikipedia.org/wiki/ISO_3166-1]country code[/url], in upper case.
 				[code]VARIANT[/code] - optional, language variant, region and sort order. Variant can have any number of underscored key words.
 				[code]extra[/code] - optional, semicolon separated list of additional key words. Currency, calendar, sort order and numbering system information.
 			</description>
@@ -304,52 +308,12 @@
 				[b]Note:[/b] This method is implemented on Android, Linux, macOS and Windows.
 			</description>
 		</method>
-		<method name="get_tablet_driver_count" qualifiers="const">
+		<method name="get_thread_caller_id" qualifiers="const">
 			<return type="int">
 			</return>
 			<description>
-				Returns the total number of available tablet drivers.
-				[b]Note:[/b] This method is implemented on Windows.
-			</description>
-		</method>
-		<method name="get_tablet_driver_name" qualifiers="const">
-			<return type="String">
-			</return>
-			<argument index="0" name="idx" type="int">
-			</argument>
-			<description>
-				Returns the tablet driver name for the given index.
-				[b]Note:[/b] This method is implemented on Windows.
-			</description>
-		</method>
-		<method name="get_ticks_msec" qualifiers="const">
-			<return type="int">
-			</return>
-			<description>
-				Returns the amount of time passed in milliseconds since the engine started.
-			</description>
-		</method>
-		<method name="get_ticks_usec" qualifiers="const">
-			<return type="int">
-			</return>
-			<description>
-				Returns the amount of time passed in microseconds since the engine started.
-			</description>
-		</method>
-		<method name="get_time" qualifiers="const">
-			<return type="Dictionary">
-			</return>
-			<argument index="0" name="utc" type="bool" default="false">
-			</argument>
-			<description>
-				Returns current time as a dictionary of keys: hour, minute, second.
-			</description>
-		</method>
-		<method name="get_time_zone_info" qualifiers="const">
-			<return type="Dictionary">
-			</return>
-			<description>
-				Returns the current time zone as a dictionary with the keys: bias and name.
+				Returns the ID of the current thread. This can be used in logs to ease debugging of multi-threaded applications.
+				[b]Note:[/b] Thread IDs are not deterministic and may be reused across application restarts.
 			</description>
 		</method>
 		<method name="get_unique_id" qualifiers="const">
@@ -357,26 +321,8 @@
 			</return>
 			<description>
 				Returns a string that is unique to the device.
+				[b]Note:[/b] This string may change without notice if the user reinstalls/upgrades their operating system or changes their hardware. This means it should generally not be used to encrypt persistent data as the data saved prior to an unexpected ID change would become inaccessible. The returned string may also be falsified using external programs, so do not rely on the string returned by [method get_unique_id] for security purposes.
 				[b]Note:[/b] Returns an empty string on HTML5 and UWP, as this method isn't implemented on those platforms yet.
-			</description>
-		</method>
-		<method name="get_unix_time" qualifiers="const">
-			<return type="float">
-			</return>
-			<description>
-				Returns the current UNIX epoch timestamp.
-				[b]Important:[/b] This is the system clock that the user can manully set. [b]Never use[/b] this method for precise time calculation since its results are also subject to automatic adjustments by the operating system. [b]Always use[/b] [method get_ticks_usec] or [method get_ticks_msec] for precise time calculation instead, since they are guaranteed to be monotonic (i.e. never decrease).
-			</description>
-		</method>
-		<method name="get_unix_time_from_datetime" qualifiers="const">
-			<return type="int">
-			</return>
-			<argument index="0" name="datetime" type="Dictionary">
-			</argument>
-			<description>
-				Gets an epoch time value from a dictionary of time values.
-				[code]datetime[/code] must be populated with the following keys: [code]year[/code], [code]month[/code], [code]day[/code], [code]hour[/code], [code]minute[/code], [code]second[/code].
-				You can pass the output from [method get_datetime_from_unix_time] directly into this function. Daylight Savings Time ([code]dst[/code]), if present, is ignored.
 			</description>
 		</method>
 		<method name="get_user_data_dir" qualifiers="const">
@@ -388,15 +334,17 @@
 				On macOS, this is [code]~/Library/Application Support/Godot/app_userdata/[project_name][/code], or [code]~/Library/Application Support/[custom_name][/code] if [code]use_custom_user_dir[/code] is set.
 				On Windows, this is [code]%APPDATA%\Godot\app_userdata\[project_name][/code], or [code]%APPDATA%\[custom_name][/code] if [code]use_custom_user_dir[/code] is set. [code]%APPDATA%[/code] expands to [code]%USERPROFILE%\AppData\Roaming[/code].
 				If the project name is empty, [code]user://[/code] falls back to [code]res://[/code].
+				Not to be confused with [method get_data_dir], which returns the [i]global[/i] (non-project-specific) user data directory.
 			</description>
 		</method>
 		<method name="has_environment" qualifiers="const">
 			<return type="bool">
 			</return>
-			<argument index="0" name="environment" type="String">
+			<argument index="0" name="variable" type="String">
 			</argument>
 			<description>
-				Returns [code]true[/code] if an environment variable exists.
+				Returns [code]true[/code] if the environment variable with the name [code]variable[/code] exists.
+				[b]Note:[/b] Double-check the casing of [code]variable[/code]. Environment variable names are case-sensitive on all platforms except Windows.
 			</description>
 		</method>
 		<method name="has_feature" qualifiers="const">
@@ -511,6 +459,18 @@
 				[b]Note:[/b] This method is implemented on Android.
 			</description>
 		</method>
+		<method name="set_environment" qualifiers="const">
+			<return type="bool">
+			</return>
+			<argument index="0" name="variable" type="String">
+			</argument>
+			<argument index="1" name="value" type="String">
+			</argument>
+			<description>
+				Sets the value of the environment variable [code]variable[/code] to [code]value[/code]. The environment variable will be set for the Godot process and any process executed with [method execute] after running [method set_environment]. The environment variable will [i]not[/i] persist to processes run after the Godot process was terminated.
+				[b]Note:[/b] Double-check the casing of [code]variable[/code]. Environment variable names are case-sensitive on all platforms except Windows.
+			</description>
+		</method>
 		<method name="set_thread_name">
 			<return type="int" enum="Error">
 			</return>
@@ -545,18 +505,11 @@
 		</method>
 	</methods>
 	<members>
-		<member name="exit_code" type="int" setter="set_exit_code" getter="get_exit_code" default="0">
-			The exit code passed to the OS when the main loop exits. By convention, an exit code of [code]0[/code] indicates success whereas a non-zero exit code indicates an error. For portability reasons, the exit code should be set between 0 and 125 (inclusive).
-			[b]Note:[/b] This value will be ignored if using [method SceneTree.quit] with an [code]exit_code[/code] argument passed.
-		</member>
 		<member name="low_processor_usage_mode" type="bool" setter="set_low_processor_usage_mode" getter="is_in_low_processor_usage_mode" default="false">
 			If [code]true[/code], the engine optimizes for low processor usage by only refreshing the screen if needed. Can improve battery consumption on mobile.
 		</member>
 		<member name="low_processor_usage_mode_sleep_usec" type="int" setter="set_low_processor_usage_mode_sleep_usec" getter="get_low_processor_usage_mode_sleep_usec" default="6900">
 			The amount of sleeping between frames when the low-processor usage mode is enabled (in microseconds). Higher values will result in lower CPU usage.
-		</member>
-		<member name="tablet_driver" type="String" setter="set_current_tablet_driver" getter="get_current_tablet_driver" default="&quot;&quot;">
-			The current tablet driver in use.
 		</member>
 	</members>
 	<constants>

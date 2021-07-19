@@ -46,6 +46,8 @@ Size2 Slider::get_minimum_size() const {
 }
 
 void Slider::_gui_input(Ref<InputEvent> p_event) {
+	ERR_FAIL_COND(p_event.is_null());
+
 	if (!editable) {
 		return;
 	}
@@ -53,7 +55,7 @@ void Slider::_gui_input(Ref<InputEvent> p_event) {
 	Ref<InputEventMouseButton> mb = p_event;
 
 	if (mb.is_valid()) {
-		if (mb->get_button_index() == BUTTON_LEFT) {
+		if (mb->get_button_index() == MOUSE_BUTTON_LEFT) {
 			if (mb->is_pressed()) {
 				Ref<Texture2D> grabber = get_theme_icon(mouse_inside || has_focus() ? "grabber_highlight" : "grabber");
 				grab.pos = orientation == VERTICAL ? mb->get_position().y : mb->get_position().x;
@@ -72,9 +74,11 @@ void Slider::_gui_input(Ref<InputEvent> p_event) {
 				grab.active = false;
 			}
 		} else if (scrollable) {
-			if (mb->is_pressed() && mb->get_button_index() == BUTTON_WHEEL_UP) {
+			if (mb->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_WHEEL_UP) {
+				grab_focus();
 				set_value(get_value() + get_step());
-			} else if (mb->is_pressed() && mb->get_button_index() == BUTTON_WHEEL_DOWN) {
+			} else if (mb->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_WHEEL_DOWN) {
+				grab_focus();
 				set_value(get_value() - get_step());
 			}
 		}
@@ -168,7 +172,7 @@ void Slider::_notification(int p_what) {
 				int widget_width = style->get_minimum_size().width + style->get_center_size().width;
 				float areasize = size.height - grabber->get_size().height;
 				style->draw(ci, Rect2i(Point2i(size.width / 2 - widget_width / 2, 0), Size2i(widget_width, size.height)));
-				grabber_area->draw(ci, Rect2i(Point2i((size.width - widget_width) / 2, size.height - areasize * ratio - grabber->get_size().height / 2), Size2i(widget_width, areasize * ratio + grabber->get_size().width / 2)));
+				grabber_area->draw(ci, Rect2i(Point2i((size.width - widget_width) / 2, size.height - areasize * ratio - grabber->get_size().height / 2), Size2i(widget_width, areasize * ratio + grabber->get_size().height / 2)));
 
 				if (ticks > 1) {
 					int grabber_offset = (grabber->get_size().height / 2 - tick->get_height() / 2);
@@ -269,12 +273,5 @@ void Slider::_bind_methods() {
 
 Slider::Slider(Orientation p_orientation) {
 	orientation = p_orientation;
-	mouse_inside = false;
-	grab.active = false;
-	ticks = 0;
-	ticks_on_borders = false;
-	custom_step = -1;
-	editable = true;
-	scrollable = true;
 	set_focus_mode(FOCUS_ALL);
 }

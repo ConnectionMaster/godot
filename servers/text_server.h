@@ -31,7 +31,7 @@
 #ifndef TEXT_SERVER_H
 #define TEXT_SERVER_H
 
-#include "core/object/reference.h"
+#include "core/object/ref_counted.h"
 #include "core/os/os.h"
 #include "core/templates/rid.h"
 #include "core/variant/variant.h"
@@ -66,8 +66,16 @@ public:
 		BREAK_NONE = 0,
 		BREAK_MANDATORY = 1 << 4,
 		BREAK_WORD_BOUND = 1 << 5,
-		BREAK_GRAPHEME_BOUND = 1 << 6
-		//RESERVED = 1 << 7
+		BREAK_GRAPHEME_BOUND = 1 << 6,
+		BREAK_WORD_BOUND_ADAPTIVE = 1 << 5 | 1 << 7
+	};
+
+	enum TextOverrunFlag {
+		OVERRUN_NO_TRIMMING = 0,
+		OVERRUN_TRIM = 1 << 0,
+		OVERRUN_TRIM_WORD_ONLY = 1 << 1,
+		OVERRUN_ADD_ELLIPSIS = 1 << 2,
+		OVERRUN_ENFORCE_ELLIPSIS = 1 << 3
 	};
 
 	enum GraphemeFlag {
@@ -79,7 +87,8 @@ public:
 		GRAPHEME_IS_BREAK_SOFT = 1 << 5, // Is line break (optional break, e.g. space).
 		GRAPHEME_IS_TAB = 1 << 6, // Is tab or vertical tab.
 		GRAPHEME_IS_ELONGATION = 1 << 7, // Elongation (e.g. kashida), glyph can be duplicated or truncated to fit line to width.
-		GRAPHEME_IS_PUNCTUATION = 1 << 8 // Punctuation (can be used as word break, but not line break or justifiction).
+		GRAPHEME_IS_PUNCTUATION = 1 << 8, // Punctuation, except underscore (can be used as word break, but not line break or justifiction).
+		GRAPHEME_IS_UNDERSCORE = 1 << 9, // Underscore (can be used as word break).
 	};
 
 	enum Hinting {
@@ -97,6 +106,12 @@ public:
 		FEATURE_FONT_SYSTEM = 1 << 5,
 		FEATURE_FONT_VARIABLE = 1 << 6,
 		FEATURE_USE_SUPPORT_DATA = 1 << 7
+	};
+
+	enum ContourPointTag {
+		CONTOUR_CURVE_TAG_ON = 0x01,
+		CONTOUR_CURVE_TAG_OFF_CONIC = 0x00,
+		CONTOUR_CURVE_TAG_OFF_CUBIC = 0x02
 	};
 
 	struct Glyph {
@@ -132,7 +147,7 @@ public:
 						return true;
 					}
 				}
-				return l.count > r.count; // Sort first glyoh with count & flags, order of the rest are irrelevant.
+				return l.count > r.count; // Sort first glyph with count & flags, order of the rest are irrelevant.
 			} else {
 				return l.start < r.start;
 			}
@@ -192,18 +207,6 @@ public:
 		Vector<TextServer::Glyph> glyphs_logical;
 	};
 
-	struct BitmapFontData {
-		int height = 0;
-		int ascent = 0;
-		int charcount = 0;
-		const int *char_rects = nullptr;
-		int kerning_count = 0;
-		const int *kernings = nullptr;
-		int w = 0;
-		int h = 0;
-		const unsigned char *img = nullptr;
-	};
-
 protected:
 	static void _bind_methods();
 
@@ -236,10 +239,21 @@ public:
 	virtual RID create_font_system(const String &p_name, int p_base_size = 16) = 0;
 	virtual RID create_font_resource(const String &p_filename, int p_base_size = 16) = 0;
 	virtual RID create_font_memory(const uint8_t *p_data, size_t p_size, const String &p_type, int p_base_size = 16) = 0;
+	virtual RID create_font_bitmap(float p_height, float p_ascent, int p_base_size = 16) = 0;
+
+	virtual void font_bitmap_add_texture(RID p_font, const Ref<Texture> &p_texture) = 0;
+	virtual void font_bitmap_add_char(RID p_font, char32_t p_char, int p_texture_idx, const Rect2 &p_rect, const Size2 &p_align, float p_advance) = 0;
+	virtual void font_bitmap_add_kerning_pair(RID p_font, char32_t p_A, char32_t p_B, int p_kerning) = 0;
 
 	virtual float font_get_height(RID p_font, int p_size) const = 0;
 	virtual float font_get_ascent(RID p_font, int p_size) const = 0;
 	virtual float font_get_descent(RID p_font, int p_size) const = 0;
+
+	virtual int font_get_spacing_space(RID p_font) const = 0;
+	virtual void font_set_spacing_space(RID p_font, int p_value) = 0;
+
+	virtual int font_get_spacing_glyph(RID p_font) const = 0;
+	virtual void font_set_spacing_glyph(RID p_font, int p_value) = 0;
 
 	virtual float font_get_underline_position(RID p_font, int p_size) const = 0;
 	virtual float font_get_underline_thickness(RID p_font, int p_size) const = 0;
@@ -286,6 +300,8 @@ public:
 
 	virtual Vector2 font_draw_glyph(RID p_font, RID p_canvas, int p_size, const Vector2 &p_pos, uint32_t p_index, const Color &p_color = Color(1, 1, 1)) const = 0;
 	virtual Vector2 font_draw_glyph_outline(RID p_font, RID p_canvas, int p_size, int p_outline_size, const Vector2 &p_pos, uint32_t p_index, const Color &p_color = Color(1, 1, 1)) const = 0;
+
+	virtual bool font_get_glyph_contours(RID p_font, int p_size, uint32_t p_index, Vector<Vector3> &r_points, Vector<int32_t> &r_contours, bool &r_orientation) const = 0;
 
 	virtual float font_get_oversampling() const = 0;
 	virtual void font_set_oversampling(float p_oversampling) = 0;
@@ -339,7 +355,9 @@ public:
 
 	virtual Vector<Vector2i> shaped_text_get_line_breaks_adv(RID p_shaped, const Vector<float> &p_width, int p_start = 0, bool p_once = true, uint8_t /*TextBreakFlag*/ p_break_flags = BREAK_MANDATORY | BREAK_WORD_BOUND) const;
 	virtual Vector<Vector2i> shaped_text_get_line_breaks(RID p_shaped, float p_width, int p_start = 0, uint8_t /*TextBreakFlag*/ p_break_flags = BREAK_MANDATORY | BREAK_WORD_BOUND) const;
-	virtual Vector<Vector2i> shaped_text_get_word_breaks(RID p_shaped) const;
+	virtual Vector<Vector2i> shaped_text_get_word_breaks(RID p_shaped, int p_grapheme_flags = GRAPHEME_IS_SPACE | GRAPHEME_IS_PUNCTUATION) const;
+
+	virtual void shaped_text_overrun_trim_to_width(RID p_shaped, float p_width, uint8_t p_clip_flags) = 0;
 	virtual Array shaped_text_get_objects(RID p_shaped) const = 0;
 	virtual Rect2 shaped_text_get_object_rect(RID p_shaped, Variant p_key) const = 0;
 
@@ -372,6 +390,8 @@ public:
 
 	/* GDScript wrappers */
 	RID _create_font_memory(const PackedByteArray &p_data, const String &p_type, int p_base_size = 16);
+
+	Dictionary _font_get_glyph_contours(RID p_font, int p_size, uint32_t p_index) const;
 
 	Array _shaped_text_get_glyphs(RID p_shaped) const;
 	Dictionary _shaped_text_get_carets(RID p_shaped, int p_position) const;
@@ -452,8 +472,10 @@ VARIANT_ENUM_CAST(TextServer::Direction);
 VARIANT_ENUM_CAST(TextServer::Orientation);
 VARIANT_ENUM_CAST(TextServer::JustificationFlag);
 VARIANT_ENUM_CAST(TextServer::LineBreakFlag);
+VARIANT_ENUM_CAST(TextServer::TextOverrunFlag);
 VARIANT_ENUM_CAST(TextServer::GraphemeFlag);
 VARIANT_ENUM_CAST(TextServer::Hinting);
 VARIANT_ENUM_CAST(TextServer::Feature);
+VARIANT_ENUM_CAST(TextServer::ContourPointTag);
 
 #endif // TEXT_SERVER_H

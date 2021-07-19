@@ -118,7 +118,7 @@ void AudioEffectRecordInstance::init() {
 #ifdef NO_THREADS
 	AudioServer::get_singleton()->add_update_callback(&AudioEffectRecordInstance::_update, this);
 #else
-	io_thread = Thread::create(_thread_callback, this);
+	io_thread.start(_thread_callback, this);
 #endif
 }
 
@@ -126,9 +126,7 @@ void AudioEffectRecordInstance::finish() {
 #ifdef NO_THREADS
 	AudioServer::get_singleton()->remove_update_callback(&AudioEffectRecordInstance::_update, this);
 #else
-	if (thread_active) {
-		Thread::wait_to_finish(io_thread);
-	}
+	io_thread.wait_to_finish();
 #endif
 }
 
@@ -136,9 +134,9 @@ AudioEffectRecordInstance::~AudioEffectRecordInstance() {
 	finish();
 }
 
-Ref<AudioEffectInstance> AudioEffectRecord::instance() {
+Ref<AudioEffectInstance> AudioEffectRecord::instantiate() {
 	Ref<AudioEffectRecordInstance> ins;
-	ins.instance();
+	ins.instantiate();
 	ins->base = Ref<AudioEffectRecord>(this);
 	ins->is_recording = false;
 
@@ -271,7 +269,7 @@ Ref<AudioStreamSample> AudioEffectRecord::get_recording() const {
 	}
 
 	Ref<AudioStreamSample> sample;
-	sample.instance();
+	sample.instantiate();
 	sample->set_data(dst_data);
 	sample->set_format(dst_format);
 	sample->set_mix_rate(AudioServer::get_singleton()->get_mix_rate());

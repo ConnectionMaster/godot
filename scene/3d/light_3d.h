@@ -71,16 +71,16 @@ public:
 
 private:
 	Color color;
-	float param[PARAM_MAX];
+	float param[PARAM_MAX] = {};
 	Color shadow_color;
-	bool shadow;
-	bool negative;
-	bool reverse_cull;
-	uint32_t cull_mask;
-	RS::LightType type;
-	bool editor_only;
+	bool shadow = false;
+	bool negative = false;
+	bool reverse_cull = false;
+	uint32_t cull_mask = 0;
+	RS::LightType type = RenderingServer::LIGHT_DIRECTIONAL;
+	bool editor_only = false;
 	void _update_visibility();
-	BakeMode bake_mode;
+	BakeMode bake_mode = BAKE_DYNAMIC;
 	Ref<Texture2D> projector;
 
 	// bind helpers
@@ -149,15 +149,9 @@ public:
 		SHADOW_PARALLEL_4_SPLITS,
 	};
 
-	enum ShadowDepthRange {
-		SHADOW_DEPTH_RANGE_STABLE = RS::LIGHT_DIRECTIONAL_SHADOW_DEPTH_RANGE_STABLE,
-		SHADOW_DEPTH_RANGE_OPTIMIZED = RS::LIGHT_DIRECTIONAL_SHADOW_DEPTH_RANGE_OPTIMIZED,
-	};
-
 private:
 	bool blend_splits;
 	ShadowMode shadow_mode;
-	ShadowDepthRange shadow_depth_range;
 	bool sky_only = false;
 
 protected:
@@ -166,9 +160,6 @@ protected:
 public:
 	void set_shadow_mode(ShadowMode p_mode);
 	ShadowMode get_shadow_mode() const;
-
-	void set_shadow_depth_range(ShadowDepthRange p_range);
-	ShadowDepthRange get_shadow_depth_range() const;
 
 	void set_blend_splits(bool p_enable);
 	bool is_blend_splits_enabled() const;
@@ -180,7 +171,6 @@ public:
 };
 
 VARIANT_ENUM_CAST(DirectionalLight3D::ShadowMode)
-VARIANT_ENUM_CAST(DirectionalLight3D::ShadowDepthRange)
 
 class OmniLight3D : public Light3D {
 	GDCLASS(OmniLight3D, Light3D);
@@ -202,7 +192,7 @@ public:
 	void set_shadow_mode(ShadowMode p_mode);
 	ShadowMode get_shadow_mode() const;
 
-	virtual String get_configuration_warning() const override;
+	TypedArray<String> get_configuration_warnings() const override;
 
 	OmniLight3D();
 };
@@ -216,7 +206,7 @@ protected:
 	static void _bind_methods();
 
 public:
-	virtual String get_configuration_warning() const override;
+	TypedArray<String> get_configuration_warnings() const override;
 
 	SpotLight3D() :
 			Light3D(RenderingServer::LIGHT_SPOT) {}

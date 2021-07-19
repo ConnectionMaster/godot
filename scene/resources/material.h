@@ -79,6 +79,8 @@ class ShaderMaterial : public Material {
 	GDCLASS(ShaderMaterial, Material);
 	Ref<Shader> shader;
 
+	Map<StringName, Variant> param_cache;
+
 protected:
 	bool _set(const StringName &p_name, const Variant &p_value);
 	bool _get(const StringName &p_name, Variant &r_ret) const;
@@ -235,6 +237,7 @@ public:
 		FLAG_USE_TEXTURE_REPEAT,
 		FLAG_INVERT_HEIGHTMAP,
 		FLAG_SUBSURFACE_MODE_SKIN,
+		FLAG_PARTICLE_TRAILS_MODE,
 		FLAG_MAX
 	};
 
@@ -242,7 +245,6 @@ public:
 		DIFFUSE_BURLEY,
 		DIFFUSE_LAMBERT,
 		DIFFUSE_LAMBERT_WRAP,
-		DIFFUSE_OREN_NAYAR,
 		DIFFUSE_TOON,
 		DIFFUSE_MAX
 	};
@@ -305,15 +307,14 @@ private:
 		uint64_t roughness_channel : get_num_bits(TEXTURE_CHANNEL_MAX - 1);
 		uint64_t emission_op : get_num_bits(EMISSION_OP_MAX - 1);
 		uint64_t distance_fade : get_num_bits(DISTANCE_FADE_MAX - 1);
-
-		// flag bitfield
-		uint64_t feature_mask : FEATURE_MAX - 1;
-		uint64_t flags : FLAG_MAX - 1;
-
 		// booleans
 		uint64_t deep_parallax : 1;
 		uint64_t grow : 1;
 		uint64_t proximity_fade : 1;
+
+		// flag bitfield
+		uint32_t feature_mask;
+		uint32_t flags;
 
 		MaterialKey() {
 			memset(this, 0, sizeof(MaterialKey));
@@ -330,7 +331,7 @@ private:
 
 	struct ShaderData {
 		RID shader;
-		int users;
+		int users = 0;
 	};
 
 	static Map<MaterialKey, ShaderData> shader_map;
@@ -390,7 +391,6 @@ private:
 		StringName heightmap_scale;
 		StringName subsurface_scattering_strength;
 		StringName transmittance_color;
-		StringName transmittance_curve;
 		StringName transmittance_depth;
 		StringName transmittance_boost;
 		StringName backlight;
@@ -459,7 +459,6 @@ private:
 	float transmittance_amount;
 	Color transmittance_color;
 	float transmittance_depth;
-	float transmittance_curve;
 	float transmittance_boost;
 
 	Color backlight;
@@ -468,16 +467,16 @@ private:
 	float alpha_scissor_threshold;
 	float alpha_hash_scale;
 	float alpha_antialiasing_edge;
-	bool grow_enabled;
+	bool grow_enabled = false;
 	float ao_light_affect;
 	float grow;
 	int particles_anim_h_frames;
 	int particles_anim_v_frames;
 	bool particles_anim_loop;
-	Transparency transparency;
-	ShadingMode shading_mode;
+	Transparency transparency = TRANSPARENCY_DISABLED;
+	ShadingMode shading_mode = SHADING_MODE_PER_PIXEL;
 
-	TextureFilter texture_filter;
+	TextureFilter texture_filter = TEXTURE_FILTER_LINEAR_WITH_MIPMAPS;
 
 	Vector3 uv1_scale;
 	Vector3 uv1_offset;
@@ -487,39 +486,39 @@ private:
 	Vector3 uv2_offset;
 	float uv2_triplanar_sharpness;
 
-	DetailUV detail_uv;
+	DetailUV detail_uv = DETAIL_UV_1;
 
-	bool deep_parallax;
+	bool deep_parallax = false;
 	int deep_parallax_min_layers;
 	int deep_parallax_max_layers;
-	bool heightmap_parallax_flip_tangent;
-	bool heightmap_parallax_flip_binormal;
+	bool heightmap_parallax_flip_tangent = false;
+	bool heightmap_parallax_flip_binormal = false;
 
-	bool proximity_fade_enabled;
+	bool proximity_fade_enabled = false;
 	float proximity_fade_distance;
 
-	DistanceFadeMode distance_fade;
+	DistanceFadeMode distance_fade = DISTANCE_FADE_DISABLED;
 	float distance_fade_max_distance;
 	float distance_fade_min_distance;
 
-	BlendMode blend_mode;
-	BlendMode detail_blend_mode;
-	DepthDrawMode depth_draw_mode;
-	CullMode cull_mode;
-	bool flags[FLAG_MAX];
-	SpecularMode specular_mode;
-	DiffuseMode diffuse_mode;
+	BlendMode blend_mode = BLEND_MODE_MIX;
+	BlendMode detail_blend_mode = BLEND_MODE_MIX;
+	DepthDrawMode depth_draw_mode = DEPTH_DRAW_OPAQUE_ONLY;
+	CullMode cull_mode = CULL_BACK;
+	bool flags[FLAG_MAX] = {};
+	SpecularMode specular_mode = SPECULAR_SCHLICK_GGX;
+	DiffuseMode diffuse_mode = DIFFUSE_BURLEY;
 	BillboardMode billboard_mode;
-	EmissionOperator emission_op;
+	EmissionOperator emission_op = EMISSION_OP_ADD;
 
 	TextureChannel metallic_texture_channel;
 	TextureChannel roughness_texture_channel;
 	TextureChannel ao_texture_channel;
 	TextureChannel refraction_texture_channel;
 
-	AlphaAntiAliasing alpha_antialiasing_mode;
+	AlphaAntiAliasing alpha_antialiasing_mode = ALPHA_ANTIALIASING_OFF;
 
-	bool features[FEATURE_MAX];
+	bool features[FEATURE_MAX] = {};
 
 	Ref<Texture2D> textures[TEXTURE_MAX];
 
@@ -602,9 +601,6 @@ public:
 
 	void set_transmittance_depth(float p_depth);
 	float get_transmittance_depth() const;
-
-	void set_transmittance_curve(float p_curve);
-	float get_transmittance_curve() const;
 
 	void set_transmittance_boost(float p_boost);
 	float get_transmittance_boost() const;
@@ -739,7 +735,7 @@ public:
 	static void finish_shaders();
 	static void flush_changes();
 
-	static RID get_material_rid_for_2d(bool p_shaded, bool p_transparent, bool p_double_sided, bool p_cut_alpha, bool p_opaque_prepass, bool p_billboard = false, bool p_billboard_y = false);
+	static Ref<Material> get_material_for_2d(bool p_shaded, bool p_transparent, bool p_double_sided, bool p_cut_alpha, bool p_opaque_prepass, bool p_billboard = false, bool p_billboard_y = false, RID *r_shader_rid = nullptr);
 
 	virtual RID get_shader_rid() const override;
 

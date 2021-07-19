@@ -43,11 +43,11 @@
 class Memory {
 	Memory();
 #ifdef DEBUG_ENABLED
-	static uint64_t mem_usage;
-	static uint64_t max_usage;
+	static SafeNumeric<uint64_t> mem_usage;
+	static SafeNumeric<uint64_t> max_usage;
 #endif
 
-	static uint64_t alloc_count;
+	static SafeNumeric<uint64_t> alloc_count;
 
 public:
 	static void *alloc_static(size_t p_bytes, bool p_pad_align = false);
@@ -80,7 +80,7 @@ void operator delete(void *p_mem, void *p_pointer, size_t check, const char *p_d
 
 #define memalloc(m_size) Memory::alloc_static(m_size)
 #define memrealloc(m_mem, m_size) Memory::realloc_static(m_mem, m_size)
-#define memfree(m_size) Memory::free_static(m_size)
+#define memfree(m_mem) Memory::free_static(m_mem)
 
 _ALWAYS_INLINE_ void postinitialize_handler(void *) {}
 

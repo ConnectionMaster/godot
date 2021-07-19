@@ -39,16 +39,16 @@ Error AudioDriverDummy::init() {
 	exit_thread = false;
 	samples_in = nullptr;
 
-	mix_rate = GLOBAL_GET("audio/mix_rate");
+	mix_rate = GLOBAL_GET("audio/driver/mix_rate");
 	speaker_mode = SPEAKER_MODE_STEREO;
 	channels = 2;
 
-	int latency = GLOBAL_GET("audio/output_latency");
+	int latency = GLOBAL_GET("audio/driver/output_latency");
 	buffer_frames = closest_power_of_2(latency * mix_rate / 1000);
 
 	samples_in = memnew_arr(int32_t, buffer_frames * channels);
 
-	thread = Thread::create(AudioDriverDummy::thread_func, this);
+	thread.start(AudioDriverDummy::thread_func, this);
 
 	return OK;
 };
@@ -86,31 +86,18 @@ AudioDriver::SpeakerMode AudioDriverDummy::get_speaker_mode() const {
 };
 
 void AudioDriverDummy::lock() {
-	if (!thread) {
-		return;
-	}
 	mutex.lock();
 };
 
 void AudioDriverDummy::unlock() {
-	if (!thread) {
-		return;
-	}
 	mutex.unlock();
 };
 
 void AudioDriverDummy::finish() {
-	if (!thread) {
-		return;
-	}
-
 	exit_thread = true;
-	Thread::wait_to_finish(thread);
+	thread.wait_to_finish();
 
 	if (samples_in) {
 		memdelete_arr(samples_in);
 	};
-
-	memdelete(thread);
-	thread = nullptr;
 };

@@ -101,7 +101,6 @@ public:
 		STR_TO_VAR,
 		VAR_TO_BYTES,
 		BYTES_TO_VAR,
-		COLORN,
 		MATH_SMOOTHSTEP,
 		MATH_POSMOD,
 		MATH_LERP_ANGLE,
@@ -140,7 +139,7 @@ public:
 	void set_func(BuiltinFunc p_which);
 	BuiltinFunc get_func();
 
-	virtual VisualScriptNodeInstance *instance(VisualScriptInstance *p_instance) override;
+	virtual VisualScriptNodeInstance *instantiate(VisualScriptInstance *p_instance) override;
 
 	VisualScriptBuiltinFunc(VisualScriptBuiltinFunc::BuiltinFunc func);
 	VisualScriptBuiltinFunc();
